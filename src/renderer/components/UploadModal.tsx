@@ -4,7 +4,7 @@ import { Version } from '../App'
 
 interface UploadModalProps {
   onClose: () => void
-  onSubmit: (version: Version) => void
+  onSubmit: (version: Omit<Version, 'thesisId'>) => void
 }
 
 function UploadModal({ onClose, onSubmit }: UploadModalProps) {
@@ -59,24 +59,17 @@ function UploadModal({ onClose, onSubmit }: UploadModalProps) {
     const ext = fileName.split('.').pop() || ''
     const fileType = ext.toUpperCase()
 
-    // Copy file to data directory
-    const newFilePath = await window.electronAPI.copyFile(selectedFile, id)
-
-    if (!newFilePath) {
-      alert('文件复制失败')
-      return
-    }
-
     const now = new Date()
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-    const newVersion: Version = {
+    // Note: file will be copied by the backend, so we pass the original path
+    const newVersion = {
       id,
       version,
       date: dateStr,
       changes,
       focus,
-      filePath: newFilePath,
+      filePath: selectedFile, // Backend will copy this
       fileName,
       fileType,
     }

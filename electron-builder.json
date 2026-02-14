@@ -2,7 +2,7 @@
   "appId": "com.thesis-tracker.app",
   "productName": "论文进度管理器",
   "directories": {
-    "output": "release"
+    "output": "release2"
   },
   "files": [
     "dist/**/*",
