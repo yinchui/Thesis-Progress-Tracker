@@ -12,6 +12,7 @@ npm run release:local
 Expected output:
 - Build artifacts generated
 - NSIS installer `.exe` generated under `release/`
+- Script uses `--config.win.signAndEditExecutable=false` to avoid local `winCodeSign` symlink extraction failures.
 
 ## 2. Create Git Tag
 
@@ -33,7 +34,7 @@ git push origin v<new-version>
 
 ## 4. Packaging Permission Fix (Windows)
 
-If packaging fails with a `Cannot create symbolic link` error while extracting `winCodeSign`:
+If packaging fails with a `Cannot create symbolic link` error while extracting `winCodeSign` (for example when running custom builder commands without the script flag):
 
 1. Run terminal as Administrator and retry `npm run release:local`, or
 2. Enable Windows Developer Mode, then retry.
