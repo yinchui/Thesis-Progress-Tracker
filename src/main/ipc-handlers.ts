@@ -1,8 +1,9 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import log from 'electron-log';
+import { resolveDataDir } from './path-resolver';
 
 // ==================== 类型定义 ====================
 
@@ -36,7 +37,7 @@ export interface AppData {
 
 // 获取数据目录
 function getDataDir(): string {
-  const dataDir = path.join('E:', path.sep, 'AI项目', '论文', 'data');
+  const dataDir = resolveDataDir((name) => app.getPath(name));
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
