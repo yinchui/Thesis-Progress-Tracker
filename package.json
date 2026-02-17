@@ -13,7 +13,7 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.main.json",
-    "dist:win": "electron-builder --win nsis --x64",
+    "dist:win": "electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
     "release:local": "npm run build && npm run dist:win",
     "package": "npm run release:local",
     "postinstall": "electron-builder install-app-deps"
