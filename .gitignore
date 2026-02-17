@@ -7,3 +7,5 @@ Thumbs.db
 data/
 !tests/release/
 !tests/release/**
+!docs/release/
+!docs/release/**

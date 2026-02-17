@@ -102,3 +102,16 @@ E:\AI项目\论文\data\
 ## License
 
 MIT
+
+## Windows Installer Release
+
+For a direct installable Windows build:
+
+```bash
+npm ci
+npm run release:local
+```
+
+Then publish the generated `.exe` from `release/` to GitHub Releases.
+
+Detailed guide: `docs/release/windows-github-release.md`.
