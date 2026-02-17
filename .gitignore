@@ -5,3 +5,5 @@ release/
 .DS_Store
 Thumbs.db
 data/
+!tests/release/
+!tests/release/**

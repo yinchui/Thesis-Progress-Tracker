@@ -1,33 +1,25 @@
 {
   "appId": "com.thesis-tracker.app",
-  "productName": "论文进度管理器",
+  "productName": "Thesis Progress Tracker",
   "directories": {
-    "output": "release2"
+    "output": "release"
   },
   "files": [
-    "dist/**/*",
-    "data/**/*"
+    "dist/**/*"
   ],
   "win": {
     "target": [
       {
-        "target": "portable",
+        "target": "nsis",
         "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}-${version}.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true
-  },
-  "extraResources": [
-    {
-      "from": "data",
-      "to": "data",
-      "filter": ["**/*"]
-    }
-  ]
+  }
 }
