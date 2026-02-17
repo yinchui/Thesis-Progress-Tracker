@@ -9,6 +9,9 @@
 - [ ] Installer can install, launch, and uninstall
 - [ ] Core flow smoke test passes (create thesis, add version, edit/delete, open file)
 - [ ] Data persists after restart
+- [ ] 默认路径优先为程序目录 `data`
+- [ ] 程序目录不可写时会自动回退到 `userData/data`
+- [ ] 设置页可用（选择目录 / 恢复默认 / 打开当前目录）
 
 ## GitHub Release
 

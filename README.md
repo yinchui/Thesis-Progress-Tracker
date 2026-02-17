@@ -115,3 +115,9 @@ npm run release:local
 Then publish the generated `.exe` from `release/` to GitHub Releases.
 
 Detailed guide: `docs/release/windows-github-release.md`.
+
+## Data Directory
+
+- 默认优先使用程序目录下的 `data` 文件夹（程序目录）。
+- 如果程序目录不可写，会自动回退到 `userData/data`（自动回退）。
+- 可在侧边栏 `设置` 中修改存储路径。

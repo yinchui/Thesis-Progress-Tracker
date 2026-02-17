@@ -1,7 +1,19 @@
 import * as path from 'path'
 
-export type GetPath = (name: 'userData') => string
+export interface DataDirCandidatesInput {
+  execPath: string
+  userDataPath: string
+}
 
-export function resolveDataDir(getPath: GetPath): string {
-  return path.join(getPath('userData'), 'data')
+export interface DataDirCandidates {
+  primary: string
+  fallback: string
+}
+
+export function resolveDataDirCandidates(input: DataDirCandidatesInput): DataDirCandidates {
+  const appDir = path.dirname(input.execPath)
+  return {
+    primary: path.join(appDir, 'data'),
+    fallback: path.join(input.userDataPath, 'data'),
+  }
 }

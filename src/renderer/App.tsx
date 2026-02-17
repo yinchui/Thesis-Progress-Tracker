@@ -3,7 +3,9 @@ import Sidebar from './components/Sidebar'
 import Timeline from './components/Timeline'
 import UploadModal from './components/UploadModal'
 import VersionDetailModal from './components/VersionDetailModal'
+import SettingsModal from './components/SettingsModal'
 import ThesisList, { Thesis } from './components/ThesisList'
+import { DataDirStatus } from './types'
 
 export interface Version {
   id: string
@@ -22,8 +24,9 @@ function App() {
   const [currentThesisId, setCurrentThesisId] = useState<string | null>(null)
   const [versions, setVersions] = useState<Version[]>([])
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
-  const [dataDir, setDataDir] = useState<string>('')
+  const [dataDirStatus, setDataDirStatus] = useState<DataDirStatus | null>(null)
 
   // Load theses and current thesis on mount
   useEffect(() => {
@@ -61,10 +64,41 @@ function App() {
 
   const loadDataDir = async () => {
     try {
-      const dir = await window.electronAPI.getDataDir()
-      setDataDir(dir)
+      const status = await window.electronAPI.getDataDir()
+      setDataDirStatus(status)
     } catch (error) {
       console.error('Failed to get data dir:', error)
+    }
+  }
+
+  const handleSelectDataDir = async () => {
+    try {
+      const status = await window.electronAPI.selectDataDir()
+      if (status) {
+        setDataDirStatus(status)
+      }
+    } catch (error) {
+      console.error('Failed to select data dir:', error)
+      throw error
+    }
+  }
+
+  const handleResetDataDir = async () => {
+    try {
+      const status = await window.electronAPI.resetDataDir()
+      setDataDirStatus(status)
+    } catch (error) {
+      console.error('Failed to reset data dir:', error)
+      throw error
+    }
+  }
+
+  const handleOpenDataDir = async () => {
+    try {
+      await window.electronAPI.openDataDir()
+    } catch (error) {
+      console.error('Failed to open data dir:', error)
+      throw error
     }
   }
 
@@ -185,7 +219,8 @@ function App() {
         versionCount={versions.length}
         latestVersion={versions.length > 0 ? versions[0].date : ''}
         onUploadClick={() => setShowUploadModal(true)}
-        dataDir={dataDir}
+        dataDir={dataDirStatus?.effectivePath || ''}
+        onSettingsClick={() => setShowSettingsModal(true)}
       />
 
       {/* Main Content */}
@@ -212,6 +247,16 @@ function App() {
           onUpdate={handleUpdateVersion}
           onDelete={handleDeleteVersion}
           onOpenFile={handleOpenFile}
+        />
+      )}
+
+      {showSettingsModal && (
+        <SettingsModal
+          status={dataDirStatus}
+          onClose={() => setShowSettingsModal(false)}
+          onSelectDir={handleSelectDataDir}
+          onResetDir={handleResetDataDir}
+          onOpenDir={handleOpenDataDir}
         />
       )}
     </div>

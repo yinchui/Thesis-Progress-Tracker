@@ -18,6 +18,14 @@ export interface Version {
   fileType: string
 }
 
+export type DataDirSource = 'custom' | 'app' | 'fallback'
+
+export interface DataDirStatus {
+  effectivePath: string
+  source: DataDirSource
+  fallbackMessage?: string
+}
+
 export interface ElectronAPI {
   // 论文相关
   getTheses: () => Promise<Thesis[]>
@@ -38,8 +46,10 @@ export interface ElectronAPI {
   openFile: (filePath: string) => Promise<boolean>
 
   // 目录操作
-  getDataDir: () => Promise<string>
-  selectDataDir: () => Promise<string | null>
+  getDataDir: () => Promise<DataDirStatus>
+  selectDataDir: () => Promise<DataDirStatus | null>
+  resetDataDir: () => Promise<DataDirStatus>
+  openDataDir: () => Promise<boolean>
 }
 
 declare global {

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import * as path from 'path'
-import { resolveDataDir } from '../../src/main/path-resolver'
+import { resolveDataDirCandidates } from '../../src/main/path-resolver'
 
-describe('resolveDataDir', () => {
-  it('stores app data under Electron userData path', () => {
-    const fakeGetPath = (name: string) =>
-      name === 'userData' ? 'C:/Users/test/AppData/Roaming/thesis-tracker' : ''
-    const dir = resolveDataDir(fakeGetPath)
-    expect(dir).toBe(path.join('C:/Users/test/AppData/Roaming/thesis-tracker', 'data'))
+describe('resolveDataDirCandidates', () => {
+  it('uses app directory data as primary and userData data as fallback', () => {
+    const result = resolveDataDirCandidates({
+      execPath: 'C:/Program Files/Thesis Progress Tracker/Thesis Progress Tracker.exe',
+      userDataPath: 'C:/Users/test/AppData/Roaming/Thesis Progress Tracker',
+    })
+
+    expect(result.primary).toBe(path.join('C:/Program Files/Thesis Progress Tracker', 'data'))
+    expect(result.fallback).toBe(path.join('C:/Users/test/AppData/Roaming/Thesis Progress Tracker', 'data'))
   })
 })

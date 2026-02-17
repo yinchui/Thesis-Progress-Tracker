@@ -45,3 +45,12 @@ If packaging fails with a `Cannot create symbolic link` error while extracting `
 2. Launch app and create thesis/version data.
 3. Restart app and verify data persists.
 4. Uninstall app.
+
+## 6. Data Directory Behavior
+
+1. 默认先尝试写入程序目录下的 `data` 文件夹（程序目录）。
+2. 如果程序目录不可写，应用会自动回退到 `userData/data`（自动回退）。
+3. 在侧边栏 `设置` 中可执行：
+   - 选择目录
+   - 恢复默认
+   - 打开当前目录

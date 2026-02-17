@@ -20,6 +20,14 @@ export interface Version {
   fileType: string;
 }
 
+export type DataDirSource = 'custom' | 'app' | 'fallback';
+
+export interface DataDirStatus {
+  effectivePath: string;
+  source: DataDirSource;
+  fallbackMessage?: string;
+}
+
 const electronAPI = {
   // Thesis management
   getTheses: (): Promise<Thesis[]> => ipcRenderer.invoke('get-theses'),
@@ -45,8 +53,10 @@ const electronAPI = {
   openFile: (filePath: string): Promise<boolean> => ipcRenderer.invoke('open-file', filePath),
 
   // Directory operations
-  getDataDir: (): Promise<string> => ipcRenderer.invoke('get-data-dir'),
-  selectDataDir: (): Promise<string | null> => ipcRenderer.invoke('select-data-dir'),
+  getDataDir: (): Promise<DataDirStatus> => ipcRenderer.invoke('get-data-dir'),
+  selectDataDir: (): Promise<DataDirStatus | null> => ipcRenderer.invoke('select-data-dir'),
+  resetDataDir: (): Promise<DataDirStatus> => ipcRenderer.invoke('reset-data-dir'),
+  openDataDir: (): Promise<boolean> => ipcRenderer.invoke('open-data-dir'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

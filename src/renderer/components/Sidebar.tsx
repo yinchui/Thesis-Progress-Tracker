@@ -20,6 +20,7 @@ interface SidebarProps {
   latestVersion: string
   onUploadClick: () => void
   dataDir: string
+  onSettingsClick: () => void
 }
 
 function Sidebar({
@@ -33,7 +34,8 @@ function Sidebar({
   versionCount,
   latestVersion,
   onUploadClick,
-  dataDir
+  dataDir,
+  onSettingsClick
 }: SidebarProps) {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -94,7 +96,10 @@ function Sidebar({
 
       {/* Settings */}
       <div className="px-3 pb-3">
-        <button className="w-full h-10 rounded-base bg-card border border-border flex items-center gap-2 px-3 text-text text-xs hover:bg-gray-50 transition-colors">
+        <button
+          onClick={onSettingsClick}
+          className="w-full h-10 rounded-base bg-card border border-border flex items-center gap-2 px-3 text-text text-xs hover:bg-gray-50 transition-colors"
+        >
           <svg
             className="w-4 h-4 text-primary flex-shrink-0"
             fill="none"

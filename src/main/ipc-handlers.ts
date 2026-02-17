@@ -1,11 +1,17 @@
-import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
+﻿import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import log from 'electron-log';
-import { resolveDataDir } from './path-resolver';
+import {
+  DataDirStatus,
+  resetCustomDataDir,
+  resolveRuntimeDataDirStatus,
+  RuntimeResolutionInput,
+  setCustomDataDir,
+} from './data-dir-config';
 
-// ==================== 类型定义 ====================
+// ==================== 绫诲瀷瀹氫箟 ====================
 
 export interface Thesis {
   id: string;
@@ -33,23 +39,32 @@ export interface AppData {
   versions: Version[];
 }
 
-// ==================== 工具函数 ====================
+// ==================== 宸ュ叿鍑芥暟 ====================
 
-// 获取数据目录
-function getDataDir(): string {
-  const dataDir = resolveDataDir((name) => app.getPath(name));
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-  return dataDir;
+// 鑾峰彇鏁版嵁鐩綍
+function getRuntimeResolutionInput(): RuntimeResolutionInput {
+  const userDataPath = app.getPath('userData');
+  return {
+    execPath: process.execPath,
+    userDataPath,
+    configFilePath: path.join(userDataPath, 'data-dir-config.json'),
+  };
 }
 
-// 获取数据文件路径
+function getDataDirStatus(): DataDirStatus {
+  return resolveRuntimeDataDirStatus(getRuntimeResolutionInput());
+}
+
+function getDataDir(): string {
+  return getDataDirStatus().effectivePath;
+}
+
+// 鑾峰彇鏁版嵁鏂囦欢璺緞
 function getDataFilePath(): string {
   return path.join(getDataDir(), 'data.json');
 }
 
-// 获取论文文件存储目录
+// 鑾峰彇璁烘枃鏂囦欢瀛樺偍鐩綍
 function getThesisFilesDir(thesisId: string): string {
   const dir = path.join(getDataDir(), 'files', `thesis_${thesisId}`);
   if (!fs.existsSync(dir)) {
@@ -58,12 +73,12 @@ function getThesisFilesDir(thesisId: string): string {
   return dir;
 }
 
-// 生成 UUID
+// 鐢熸垚 UUID
 function generateId(): string {
   return crypto.randomUUID();
 }
 
-// 加载数据
+// 鍔犺浇鏁版嵁
 function loadData(): AppData {
   const filePath = getDataFilePath();
   try {
@@ -81,7 +96,7 @@ function loadData(): AppData {
   };
 }
 
-// 保存数据
+// 淇濆瓨鏁版嵁
 function saveData(data: AppData): boolean {
   const filePath = getDataFilePath();
   try {
@@ -93,34 +108,34 @@ function saveData(data: AppData): boolean {
   }
 }
 
-// 创建默认论文（向后兼容）
+// 鍒涘缓榛樿璁烘枃锛堝悜鍚庡吋瀹癸級
 function ensureDefaultThesis(): AppData {
   let data = loadData();
 
-  // 如果没有论文，创建一个默认论文
+  // 濡傛灉娌℃湁璁烘枃锛屽垱寤轰竴涓粯璁よ鏂?
   if (data.theses.length === 0) {
     const defaultThesis: Thesis = {
       id: generateId(),
-      title: '默认论文',
-      description: '自动创建的默认论文',
+      title: '榛樿璁烘枃',
+      description: 'Auto-created default thesis',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    // 尝试迁移旧版本数据
+    // 灏濊瘯杩佺Щ鏃х増鏈暟鎹?
     const oldVersionsFile = path.join(getDataDir(), 'versions.json');
     if (fs.existsSync(oldVersionsFile)) {
       try {
         const oldVersions = JSON.parse(fs.readFileSync(oldVersionsFile, 'utf-8'));
         if (Array.isArray(oldVersions) && oldVersions.length > 0) {
-          // 为旧版本添加 thesisId
+          // 涓烘棫鐗堟湰娣诲姞 thesisId
           data.versions = oldVersions.map((v: any) => ({
             ...v,
             thesisId: defaultThesis.id
           }));
           log.info(`Migrated ${oldVersions.length} old versions to default thesis`);
 
-          // 移动旧文件到新目录
+          // 绉诲姩鏃ф枃浠跺埌鏂扮洰褰?
           const thesisFilesDir = getThesisFilesDir(defaultThesis.id);
           for (const v of data.versions) {
             if (v.filePath && fs.existsSync(v.filePath)) {
@@ -136,7 +151,7 @@ function ensureDefaultThesis(): AppData {
             }
           }
         }
-        // 删除旧版本文件
+        // 鍒犻櫎鏃х増鏈枃浠?
         fs.unlinkSync(oldVersionsFile);
       } catch (e) {
         log.error('Error migrating old versions:', e);
@@ -149,7 +164,7 @@ function ensureDefaultThesis(): AppData {
     log.info('Created default thesis for backward compatibility');
   }
 
-  // 确保当前论文有效
+  // 纭繚褰撳墠璁烘枃鏈夋晥
   if (!data.currentThesisId || !data.theses.find(t => t.id === data.currentThesisId)) {
     data.currentThesisId = data.theses[0]?.id || null;
     saveData(data);
@@ -160,14 +175,14 @@ function ensureDefaultThesis(): AppData {
 
 // ==================== Thesis IPC Handlers ====================
 
-// 获取所有论文列表
+// 鑾峰彇鎵€鏈夎鏂囧垪琛?
 ipcMain.handle('get-theses', async () => {
   log.info('IPC: get-theses');
   const data = ensureDefaultThesis();
   return data.theses;
 });
 
-// 创建新论文
+// 鍒涘缓鏂拌鏂?
 ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; description?: string }) => {
   log.info('IPC: create-thesis', thesisData);
   const data = loadData();
@@ -180,7 +195,7 @@ ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; desc
     updatedAt: new Date().toISOString()
   };
 
-  // 创建论文文件目录
+  // 鍒涘缓璁烘枃鏂囦欢鐩綍
   getThesisFilesDir(newThesis.id);
 
   data.theses.push(newThesis);
@@ -192,7 +207,7 @@ ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; desc
   return null;
 });
 
-// 更新论文信息
+// 鏇存柊璁烘枃淇℃伅
 ipcMain.handle('update-thesis', async (_event, id: string, updates: { title?: string; description?: string }) => {
   log.info('IPC: update-thesis', id, updates);
   const data = loadData();
@@ -212,18 +227,18 @@ ipcMain.handle('update-thesis', async (_event, id: string, updates: { title?: st
   return null;
 });
 
-// 删除论文（同时删除所有版本和文件）
+// 鍒犻櫎璁烘枃锛堝悓鏃跺垹闄ゆ墍鏈夌増鏈拰鏂囦欢锛?
 ipcMain.handle('delete-thesis', async (_event, id: string) => {
   log.info('IPC: delete-thesis', id);
   const data = loadData();
 
-  // 检查是否是最后一个论文
+  // 妫€鏌ユ槸鍚︽槸鏈€鍚庝竴涓鏂?
   if (data.theses.length <= 1) {
     log.warn('Cannot delete the last thesis');
     return false;
   }
 
-  // 删除论文的所有版本文件
+  // 鍒犻櫎璁烘枃鐨勬墍鏈夌増鏈枃浠?
   const thesisVersions = data.versions.filter(v => v.thesisId === id);
   for (const v of thesisVersions) {
     if (v.filePath && fs.existsSync(v.filePath)) {
@@ -235,7 +250,7 @@ ipcMain.handle('delete-thesis', async (_event, id: string) => {
     }
   }
 
-  // 删除论文文件目录
+  // 鍒犻櫎璁烘枃鏂囦欢鐩綍
   const thesisFilesDir = path.join(getDataDir(), 'files', `thesis_${id}`);
   if (fs.existsSync(thesisFilesDir)) {
     try {
@@ -245,11 +260,11 @@ ipcMain.handle('delete-thesis', async (_event, id: string) => {
     }
   }
 
-  // 删除论文及其版本
+  // 鍒犻櫎璁烘枃鍙婂叾鐗堟湰
   data.theses = data.theses.filter(t => t.id !== id);
   data.versions = data.versions.filter(v => v.thesisId !== id);
 
-  // 更新当前论文
+  // 鏇存柊褰撳墠璁烘枃
   if (data.currentThesisId === id) {
     data.currentThesisId = data.theses[0]?.id || null;
   }
@@ -257,7 +272,7 @@ ipcMain.handle('delete-thesis', async (_event, id: string) => {
   return saveData(data);
 });
 
-// 设置当前激活的论文
+// 璁剧疆褰撳墠婵€娲荤殑璁烘枃
 ipcMain.handle('set-current-thesis', async (_event, id: string) => {
   log.info('IPC: set-current-thesis', id);
   const data = loadData();
@@ -270,16 +285,16 @@ ipcMain.handle('set-current-thesis', async (_event, id: string) => {
   return false;
 });
 
-// 获取当前论文ID
+// 鑾峰彇褰撳墠璁烘枃ID
 ipcMain.handle('get-current-thesis', async () => {
   log.info('IPC: get-current-thesis');
   const data = ensureDefaultThesis();
   return data.currentThesisId;
 });
 
-// ==================== Version IPC Handlers (修改) ====================
+// ==================== Version IPC Handlers (淇敼) ====================
 
-// 获取版本列表（可选参数：thesisId）
+// 鑾峰彇鐗堟湰鍒楄〃锛堝彲閫夊弬鏁帮細thesisId锛?
 ipcMain.handle('get-versions', async (_event, thesisId?: string) => {
   log.info('IPC: get-versions', thesisId);
   const data = ensureDefaultThesis();
@@ -290,12 +305,12 @@ ipcMain.handle('get-versions', async (_event, thesisId?: string) => {
   return data.versions;
 });
 
-// 添加版本（需要 thesisId）
+// 娣诲姞鐗堟湰锛堥渶瑕?thesisId锛?
 ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string) => {
   log.info('IPC: add-version', versionData, thesisId);
   const data = ensureDefaultThesis();
 
-  // 确定目标论文ID
+  // 纭畾鐩爣璁烘枃ID
   const targetThesisId = thesisId || data.currentThesisId;
   if (!targetThesisId) {
     log.error('No target thesis for add-version');
@@ -314,7 +329,7 @@ ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string
     fileType: versionData.fileType
   };
 
-  // 如果有文件，复制到论文目录
+  // 濡傛灉鏈夋枃浠讹紝澶嶅埗鍒拌鏂囩洰褰?
   if (versionData.filePath && fs.existsSync(versionData.filePath)) {
     const thesisFilesDir = getThesisFilesDir(targetThesisId);
     const ext = path.extname(versionData.filePath);
@@ -331,7 +346,7 @@ ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string
 
   data.versions.unshift(newVersion);
 
-  // 更新论文的更新时间
+  // 鏇存柊璁烘枃鐨勬洿鏂版椂闂?
   const thesisIndex = data.theses.findIndex(t => t.id === targetThesisId);
   if (thesisIndex !== -1) {
     data.theses[thesisIndex].updatedAt = new Date().toISOString();
@@ -340,7 +355,7 @@ ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string
   return saveData(data);
 });
 
-// 更新版本
+// 鏇存柊鐗堟湰
 ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
   log.info('IPC: update-version', id, updates);
   const data = loadData();
@@ -349,7 +364,7 @@ ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
   if (index !== -1) {
     data.versions[index] = { ...data.versions[index], ...updates };
 
-    // 如果更新了文件，需要移动到正确的论文目录
+    // 濡傛灉鏇存柊浜嗘枃浠讹紝闇€瑕佺Щ鍔ㄥ埌姝ｇ‘鐨勮鏂囩洰褰?
     if (updates.filePath && updates.filePath !== data.versions[index].filePath) {
       const thesisId = data.versions[index].thesisId;
       const thesisFilesDir = getThesisFilesDir(thesisId);
@@ -372,12 +387,12 @@ ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
   return false;
 });
 
-// 删除版本
+// 鍒犻櫎鐗堟湰
 ipcMain.handle('delete-version', async (_event, id: string) => {
   log.info('IPC: delete-version', id);
   const data = loadData();
 
-  // 删除版本文件
+  // 鍒犻櫎鐗堟湰鏂囦欢
   const version = data.versions.find(v => v.id === id);
   if (version?.filePath && fs.existsSync(version.filePath)) {
     try {
@@ -391,9 +406,9 @@ ipcMain.handle('delete-version', async (_event, id: string) => {
   return saveData(data);
 });
 
-// ==================== 文件操作 IPC Handlers ====================
+// ==================== 鏂囦欢鎿嶄綔 IPC Handlers ====================
 
-// 选择文件
+// 閫夋嫨鏂囦欢
 ipcMain.handle('select-file', async () => {
   log.info('IPC: select-file');
   const windows = BrowserWindow.getAllWindows();
@@ -412,7 +427,7 @@ ipcMain.handle('select-file', async () => {
   return null;
 });
 
-// 复制文件（已废弃，使用内部处理）
+// 澶嶅埗鏂囦欢锛堝凡搴熷純锛屼娇鐢ㄥ唴閮ㄥ鐞嗭級
 ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string, thesisId: string) => {
   log.info('IPC: copy-file', sourcePath, versionId, thesisId);
   try {
@@ -429,7 +444,7 @@ ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string
   }
 });
 
-// 打开文件
+// 鎵撳紑鏂囦欢
 ipcMain.handle('open-file', async (_event, filePath: string) => {
   log.info('IPC: open-file', filePath);
   try {
@@ -441,20 +456,47 @@ ipcMain.handle('open-file', async (_event, filePath: string) => {
   }
 });
 
-// 获取数据目录
+// 鑾峰彇鏁版嵁鐩綍
 ipcMain.handle('get-data-dir', async () => {
-  return getDataDir();
+  return getDataDirStatus();
 });
 
-// 选择数据目录（已废弃，使用固定路径）
+// 閫夋嫨鏁版嵁鐩綍锛堝凡搴熷純锛屼娇鐢ㄥ浐瀹氳矾寰勶級
 ipcMain.handle('select-data-dir', async () => {
-  log.info('IPC: select-data-dir (deprecated)');
-  return getDataDir();
+  log.info('IPC: select-data-dir');
+  const windows = BrowserWindow.getAllWindows();
+  const mainWindow = windows[0];
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return setCustomDataDir(getRuntimeResolutionInput(), result.filePaths[0]);
 });
 
-// 初始化数据（应用启动时调用）
+ipcMain.handle('reset-data-dir', async () => {
+  log.info('IPC: reset-data-dir');
+  return resetCustomDataDir(getRuntimeResolutionInput());
+});
+
+ipcMain.handle('open-data-dir', async () => {
+  log.info('IPC: open-data-dir');
+  try {
+    const status = getDataDirStatus();
+    await shell.openPath(status.effectivePath);
+    return true;
+  } catch (error) {
+    log.error('Error opening data directory:', error);
+    return false;
+  }
+});
+
+// 鍒濆鍖栨暟鎹紙搴旂敤鍚姩鏃惰皟鐢級
 export function initializeApp(): void {
   log.info('Initializing app data...');
   ensureDefaultThesis();
   log.info('App data initialized');
 }
+
+
