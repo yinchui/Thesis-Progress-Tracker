@@ -1,4 +1,5 @@
 import * as crypto from 'crypto'
+import { execFileSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 import log from 'electron-log'
@@ -7,6 +8,7 @@ import { isLockFileForTargetFile, supportsAutoArchive } from './version-utils'
 
 let activeSession: EditSession | null = null
 let activeWatcher: fs.FSWatcher | null = null
+let activePollTimer: NodeJS.Timeout | null = null
 
 export function getActiveSession(): EditSession | null {
   return activeSession
@@ -129,6 +131,14 @@ export function clearSession(dataDir?: string, deleteFile?: boolean): void {
   }
 }
 
+export function shouldAutoArchiveAfterClose(
+  initialModifiedTimeMs: number,
+  currentModifiedTimeMs: number,
+  isOpen: boolean,
+): boolean {
+  return currentModifiedTimeMs > initialModifiedTimeMs && !isOpen
+}
+
 /**
  * Start watching for lock file deletion (auto-archive).
  * Call onArchive when the lock file is deleted (debounced 2s).
@@ -139,7 +149,25 @@ export function startLockFileWatch(
   onError: () => void,
 ): void {
   const dir = path.dirname(session.editFilePath)
+  const initialModifiedTimeMs = getFileModifiedTimeMs(session.editFilePath)
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let archiveRequested = false
+
+  const scheduleArchive = () => {
+    if (archiveRequested) return
+    archiveRequested = true
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      const currentModifiedTimeMs = getFileModifiedTimeMs(session.editFilePath)
+      const stillOpen = isFileCurrentlyOpen(session.editFilePath)
+      if (shouldAutoArchiveAfterClose(initialModifiedTimeMs, currentModifiedTimeMs, stillOpen)) {
+        log.info('Edit file closed after modification, auto-archiving')
+        onArchive()
+        return
+      }
+      archiveRequested = false
+    }, 2000)
+  }
 
   try {
     activeWatcher = fs.watch(dir, (_eventType, filename) => {
@@ -149,16 +177,12 @@ export function startLockFileWatch(
 
       const lockPath = path.join(dir, lockFileName)
       if (!fs.existsSync(lockPath)) {
-        if (debounceTimer) clearTimeout(debounceTimer)
-        debounceTimer = setTimeout(() => {
-          if (!fs.existsSync(lockPath)) {
-            log.info('Lock file deleted, auto-archiving')
-            onArchive()
-          }
-        }, 2000)
+        log.info('Lock file deleted:', lockFileName)
+        scheduleArchive()
       } else if (debounceTimer) {
         clearTimeout(debounceTimer)
         debounceTimer = null
+        archiveRequested = false
       }
     })
 
@@ -169,6 +193,17 @@ export function startLockFileWatch(
     })
 
     log.info('Started lock file watch for session:', session.newVersionId)
+
+    if (process.platform === 'darwin') {
+      activePollTimer = setInterval(() => {
+        const currentModifiedTimeMs = getFileModifiedTimeMs(session.editFilePath)
+        const stillOpen = isFileCurrentlyOpen(session.editFilePath)
+        if (shouldAutoArchiveAfterClose(initialModifiedTimeMs, currentModifiedTimeMs, stillOpen)) {
+          log.info('Detected modified file closed without lock file, auto-archiving')
+          scheduleArchive()
+        }
+      }, 2000)
+    }
   } catch (err) {
     log.error('Failed to start lock file watch:', err)
     onError()
@@ -179,6 +214,10 @@ export function stopWatcher(): void {
   if (activeWatcher) {
     activeWatcher.close()
     activeWatcher = null
+  }
+  if (activePollTimer) {
+    clearInterval(activePollTimer)
+    activePollTimer = null
   }
 }
 
@@ -209,4 +248,23 @@ export function loadPersistedSession(dataDir: string): EditSession | null {
     log.error('Error loading persisted session:', e)
   }
   return null
+}
+
+function getFileModifiedTimeMs(filePath: string): number {
+  try {
+    return fs.statSync(filePath).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+function isFileCurrentlyOpen(filePath: string): boolean {
+  try {
+    const output = execFileSync('lsof', ['-t', filePath], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim()
+    return output.length > 0
+  } catch {
+    return false
+  }
 }

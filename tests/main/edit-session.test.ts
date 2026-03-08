@@ -8,6 +8,7 @@ import {
   createEditSession,
   getActiveSession,
   loadPersistedSession,
+  shouldAutoArchiveAfterClose,
 } from '../../src/main/edit-session'
 
 let tmpDir: string
@@ -170,5 +171,19 @@ describe('loadPersistedSession', () => {
     const loaded = loadPersistedSession(tmpDir)
     expect(loaded).not.toBeNull()
     expect(loaded!.versionInfo.version).toBe('v1.1')
+  })
+})
+
+describe('shouldAutoArchiveAfterClose', () => {
+  it('returns true when file changed and is no longer open', () => {
+    expect(shouldAutoArchiveAfterClose(100, 200, false)).toBe(true)
+  })
+
+  it('returns false when file changed but is still open', () => {
+    expect(shouldAutoArchiveAfterClose(100, 200, true)).toBe(false)
+  })
+
+  it('returns false when file did not change', () => {
+    expect(shouldAutoArchiveAfterClose(100, 100, false)).toBe(false)
   })
 })
