@@ -10,6 +10,15 @@ import {
   RuntimeResolutionInput,
   setCustomDataDir,
 } from './data-dir-config';
+import {
+  archiveSession,
+  clearSession,
+  createEditSession,
+  getActiveSession,
+  loadPersistedSession,
+  startLockFileWatch,
+} from './edit-session';
+import { EditSessionParams } from './edit-session-types';
 
 // ==================== 绫诲瀷瀹氫箟 ====================
 
@@ -492,11 +501,87 @@ ipcMain.handle('open-data-dir', async () => {
   }
 });
 
+// ==================== Edit Session IPC Handlers ====================
+
+ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) => {
+  log.info('IPC: start-edit-session', params.baseVersionId);
+  const dataDir = getDataDir();
+
+  const session = createEditSession(params, dataDir);
+
+  const openResult = await shell.openPath(session.editFilePath);
+  if (openResult) {
+    log.error('Failed to open file:', openResult);
+    clearSession(dataDir, true);
+    throw new Error(`未找到可打开此文件的程序: ${openResult}`);
+  }
+
+  if (session.autoArchive) {
+    startLockFileWatch(
+      session,
+      () => {
+        const archived = archiveSession(dataDir);
+        if (archived) {
+          const windows = BrowserWindow.getAllWindows();
+          if (windows.length > 0) {
+            windows[0].webContents.send('finish-edit-session', archived);
+          }
+        }
+      },
+      () => {
+        const windows = BrowserWindow.getAllWindows();
+        if (windows.length > 0) {
+          windows[0].webContents.send('edit-session-watch-error');
+        }
+      },
+    );
+  }
+
+  return session;
+});
+
+ipcMain.handle('cancel-edit-session', async () => {
+  log.info('IPC: cancel-edit-session');
+  const dataDir = getDataDir();
+  clearSession(dataDir, true);
+  return true;
+});
+
+ipcMain.handle('finish-edit-session', async () => {
+  log.info('IPC: finish-edit-session (manual)');
+  const dataDir = getDataDir();
+  const archived = archiveSession(dataDir);
+  if (archived) {
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('get-pending-edit-session', async () => {
+  const dataDir = getDataDir();
+  return loadPersistedSession(dataDir);
+});
+
+ipcMain.handle('resolve-pending-edit-session', async (_event, keep: boolean) => {
+  const dataDir = getDataDir();
+  if (keep) {
+    const archived = archiveSession(dataDir);
+    return archived !== null;
+  }
+
+  clearSession(dataDir, true);
+  return true;
+});
+
 // 鍒濆鍖栨暟鎹紙搴旂敤鍚姩鏃惰皟鐢級
 export function initializeApp(): void {
   log.info('Initializing app data...');
   ensureDefaultThesis();
+  const dataDir = getDataDir();
+  const persisted = loadPersistedSession(dataDir);
+  if (persisted) {
+    log.info('Found unfinished edit session:', persisted.newVersionId);
+  }
   log.info('App data initialized');
 }
-
 
