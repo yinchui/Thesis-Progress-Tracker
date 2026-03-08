@@ -1,4 +1,5 @@
 import { Version } from '../App'
+import EditSessionBar from './EditSessionBar'
 import VersionCard from './VersionCard'
 
 interface TimelineProps {
@@ -6,9 +7,24 @@ interface TimelineProps {
   thesisTitle?: string
   onVersionClick: (version: Version) => void
   onOpenFile: (filePath: string) => void
+  editSession?: {
+    baseVersion: string
+    newVersion: string
+    autoArchive: boolean
+  } | null
+  onCancelEdit?: () => void
+  onFinishEdit?: () => void
 }
 
-function Timeline({ versions, thesisTitle, onVersionClick, onOpenFile }: TimelineProps) {
+function Timeline({
+  versions,
+  thesisTitle,
+  onVersionClick,
+  onOpenFile,
+  editSession,
+  onCancelEdit,
+  onFinishEdit,
+}: TimelineProps) {
   if (versions.length === 0) {
     return (
       <main className="flex-1 p-6 flex flex-col gap-4 overflow-auto">
@@ -18,6 +34,15 @@ function Timeline({ versions, thesisTitle, onVersionClick, onOpenFile }: Timelin
           </h1>
           <p className="text-muted text-xs">按时间回看每次论文迭代，随时掌握当前写作重点</p>
         </div>
+        {editSession && (
+          <EditSessionBar
+            baseVersion={editSession.baseVersion}
+            newVersion={editSession.newVersion}
+            autoArchive={editSession.autoArchive}
+            onCancel={onCancelEdit || (() => {})}
+            onFinish={onFinishEdit || (() => {})}
+          />
+        )}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent flex items-center justify-center">
@@ -51,6 +76,15 @@ function Timeline({ versions, thesisTitle, onVersionClick, onOpenFile }: Timelin
         </h1>
         <p className="text-muted text-xs">按时间回看每次论文迭代，随时掌握当前写作重点</p>
       </div>
+      {editSession && (
+        <EditSessionBar
+          baseVersion={editSession.baseVersion}
+          newVersion={editSession.newVersion}
+          autoArchive={editSession.autoArchive}
+          onCancel={onCancelEdit || (() => {})}
+          onFinish={onFinishEdit || (() => {})}
+        />
+      )}
 
       <div className="flex-1 flex flex-col gap-4 py-1">
         {versions.map((version, index) => (
