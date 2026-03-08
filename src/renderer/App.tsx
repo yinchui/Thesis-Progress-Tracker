@@ -3,9 +3,10 @@ import Sidebar from './components/Sidebar'
 import Timeline from './components/Timeline'
 import UploadModal from './components/UploadModal'
 import VersionDetailModal from './components/VersionDetailModal'
+import EditVersionModal from './components/EditVersionModal'
 import SettingsModal from './components/SettingsModal'
-import ThesisList, { Thesis } from './components/ThesisList'
-import { DataDirStatus } from './types'
+import { Thesis } from './components/ThesisList'
+import { DataDirStatus, EditSession } from './types'
 
 export interface Version {
   id: string
@@ -19,6 +20,13 @@ export interface Version {
   fileType: string
 }
 
+function incrementVersion(version: string): string {
+  const match = version.match(/^(.*?)(\d+)(\D*)$/)
+  if (!match) return version
+  const [, prefix, num, suffix] = match
+  return `${prefix}${parseInt(num, 10) + 1}${suffix}`
+}
+
 function App() {
   const [theses, setTheses] = useState<Thesis[]>([])
   const [currentThesisId, setCurrentThesisId] = useState<string | null>(null)
@@ -27,6 +35,10 @@ function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
   const [dataDirStatus, setDataDirStatus] = useState<DataDirStatus | null>(null)
+  const [editSession, setEditSession] = useState<EditSession | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editBaseVersion, setEditBaseVersion] = useState<Version | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   // Load theses and current thesis on mount
   useEffect(() => {
@@ -40,6 +52,42 @@ function App() {
       loadVersions(currentThesisId)
     }
   }, [currentThesisId])
+
+  useEffect(() => {
+    const handler = (_event: any, session: EditSession) => {
+      setEditSession(null)
+      if (currentThesisId) {
+        void loadVersions(currentThesisId)
+      }
+      setToast(`${session.versionInfo.version} 已自动保存`)
+      setTimeout(() => setToast(null), 3000)
+    }
+
+    window.electronAPI.onEditSessionFinished(handler)
+
+    return () => {
+      window.electronAPI.removeEditSessionListener()
+    }
+  }, [currentThesisId])
+
+  useEffect(() => {
+    const checkPending = async () => {
+      try {
+        const pending = await window.electronAPI.getPendingEditSession()
+        if (pending) {
+          const keep = confirm(`上次编辑 ${pending.versionInfo.version} 未完成，是否保留为新版本？`)
+          await window.electronAPI.resolvePendingEditSession(keep)
+          if (keep && currentThesisId) {
+            await loadVersions(currentThesisId)
+          }
+        }
+      } catch (e) {
+        console.error('Failed to check pending session:', e)
+      }
+    }
+
+    void checkPending()
+  }, [])
 
   const loadTheses = async () => {
     try {
@@ -203,6 +251,67 @@ function App() {
     }
   }
 
+  const handleEditFromVersion = (version: Version) => {
+    setEditBaseVersion(version)
+    setSelectedVersion(null)
+    setShowEditModal(true)
+  }
+
+  const handleStartEditSession = async (versionInfo: {
+    version: string
+    changes: string
+    focus: string
+    replacementFilePath?: string
+  }) => {
+    if (!editBaseVersion || !currentThesisId) return
+    try {
+      const session = await window.electronAPI.startEditSession({
+        baseVersionId: editBaseVersion.id,
+        thesisId: currentThesisId,
+        baseFilePath: editBaseVersion.filePath,
+        baseFileName: editBaseVersion.fileName,
+        baseFileType: editBaseVersion.fileType,
+        versionInfo: {
+          version: versionInfo.version,
+          changes: versionInfo.changes,
+          focus: versionInfo.focus,
+        },
+        replacementFilePath: versionInfo.replacementFilePath,
+      })
+      setEditSession(session)
+      setShowEditModal(false)
+      setEditBaseVersion(null)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '启动编辑失败'
+      alert(msg)
+    }
+  }
+
+  const handleCancelEdit = async () => {
+    if (!confirm('确定要取消编辑吗？未保存的修改将丢失。')) return
+    try {
+      await window.electronAPI.cancelEditSession()
+      setEditSession(null)
+    } catch (error) {
+      console.error('Failed to cancel edit:', error)
+    }
+  }
+
+  const handleFinishEdit = async () => {
+    try {
+      const savedVersion = editSession?.versionInfo.version
+      await window.electronAPI.finishEditSession()
+      setEditSession(null)
+      if (currentThesisId) {
+        await loadVersions(currentThesisId)
+      }
+      setToast(`${savedVersion} 已保存`)
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to finish edit:', error)
+    }
+  }
+
   const currentThesis = theses.find(t => t.id === currentThesisId)
 
   return (
@@ -212,7 +321,7 @@ function App() {
         theses={theses}
         currentThesisId={currentThesisId}
         currentThesis={currentThesis}
-        onSelectThesis={handleSelectThesis}
+        onSelectThesis={editSession ? () => {} : handleSelectThesis}
         onCreateThesis={handleCreateThesis}
         onDeleteThesis={handleDeleteThesis}
         onUpdateThesis={handleUpdateThesis}
@@ -221,6 +330,7 @@ function App() {
         onUploadClick={() => setShowUploadModal(true)}
         dataDir={dataDirStatus?.effectivePath || ''}
         onSettingsClick={() => setShowSettingsModal(true)}
+        uploadDisabled={!!editSession}
       />
 
       {/* Main Content */}
@@ -229,6 +339,13 @@ function App() {
         thesisTitle={currentThesis?.title || ''}
         onVersionClick={setSelectedVersion}
         onOpenFile={handleOpenFile}
+        editSession={editSession ? {
+          baseVersion: versions.find(v => v.id === editSession.baseVersionId)?.version || '?',
+          newVersion: editSession.versionInfo.version,
+          autoArchive: editSession.autoArchive,
+        } : null}
+        onCancelEdit={handleCancelEdit}
+        onFinishEdit={handleFinishEdit}
       />
 
       {/* Upload Modal */}
@@ -247,6 +364,20 @@ function App() {
           onUpdate={handleUpdateVersion}
           onDelete={handleDeleteVersion}
           onOpenFile={handleOpenFile}
+          onEditFromVersion={handleEditFromVersion}
+          editDisabled={!!editSession}
+        />
+      )}
+
+      {showEditModal && editBaseVersion && (
+        <EditVersionModal
+          baseVersion={editBaseVersion}
+          suggestedVersion={incrementVersion(editBaseVersion.version)}
+          onClose={() => {
+            setShowEditModal(false)
+            setEditBaseVersion(null)
+          }}
+          onSubmit={handleStartEditSession}
         />
       )}
 
@@ -258,6 +389,12 @@ function App() {
           onResetDir={handleResetDataDir}
           onOpenDir={handleOpenDataDir}
         />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-primary text-white px-4 py-2 rounded-base shadow-card text-sm font-bold z-50">
+          {toast}
+        </div>
       )}
     </div>
   )

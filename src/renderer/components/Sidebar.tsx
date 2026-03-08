@@ -21,6 +21,7 @@ interface SidebarProps {
   onUploadClick: () => void
   dataDir: string
   onSettingsClick: () => void
+  uploadDisabled?: boolean
 }
 
 function Sidebar({
@@ -35,7 +36,8 @@ function Sidebar({
   latestVersion,
   onUploadClick,
   dataDir,
-  onSettingsClick
+  onSettingsClick,
+  uploadDisabled
 }: SidebarProps) {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -88,7 +90,7 @@ function Sidebar({
       {/* Upload Button */}
       <button
         onClick={onUploadClick}
-        disabled={!currentThesisId}
+        disabled={!currentThesisId || uploadDisabled}
         className="mx-3 mb-3 h-11 rounded-base bg-primary text-white font-bold text-sm flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
       >
         上传新版本
