@@ -79,8 +79,11 @@ export interface ElectronAPI {
   }) => Promise<EditSession>
   cancelEditSession: () => Promise<boolean>
   finishEditSession: () => Promise<boolean>
-  onEditSessionFinished: (callback: (session: EditSession) => void) => void
+  onEditSessionFinished: (callback: (event: any, session: EditSession) => void) => void
   removeEditSessionListener: () => void
+  onEditSessionWatchError: (callback: () => void) => void
+  getPendingEditSession: () => Promise<EditSession | null>
+  resolvePendingEditSession: (keep: boolean) => Promise<boolean>
 }
 
 declare global {
