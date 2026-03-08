@@ -26,6 +26,22 @@ export interface DataDirStatus {
   fallbackMessage?: string
 }
 
+export interface EditSession {
+  newVersionId: string
+  baseVersionId: string
+  thesisId: string
+  versionInfo: {
+    version: string
+    changes: string
+    focus: string
+  }
+  editFilePath: string
+  fileName: string
+  fileType: string
+  autoArchive: boolean
+  date: string
+}
+
 export interface ElectronAPI {
   // 论文相关
   getTheses: () => Promise<Thesis[]>
@@ -50,6 +66,21 @@ export interface ElectronAPI {
   selectDataDir: () => Promise<DataDirStatus | null>
   resetDataDir: () => Promise<DataDirStatus>
   openDataDir: () => Promise<boolean>
+
+  // 编辑会话
+  startEditSession: (params: {
+    baseVersionId: string
+    thesisId: string
+    baseFilePath: string
+    baseFileName: string
+    baseFileType: string
+    versionInfo: { version: string; changes: string; focus: string }
+    replacementFilePath?: string
+  }) => Promise<EditSession>
+  cancelEditSession: () => Promise<boolean>
+  finishEditSession: () => Promise<boolean>
+  onEditSessionFinished: (callback: (session: EditSession) => void) => void
+  removeEditSessionListener: () => void
 }
 
 declare global {
