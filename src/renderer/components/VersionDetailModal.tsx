@@ -7,6 +7,8 @@ interface VersionDetailModalProps {
   onUpdate: (id: string, updates: Partial<Version>) => void
   onDelete: (id: string) => void
   onOpenFile: (filePath: string) => void
+  onEditFromVersion?: (version: Version) => void
+  editDisabled?: boolean
 }
 
 function VersionDetailModal({
@@ -15,6 +17,8 @@ function VersionDetailModal({
   onUpdate,
   onDelete,
   onOpenFile,
+  onEditFromVersion,
+  editDisabled,
 }: VersionDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editVersion, setEditVersion] = useState(version.version)
@@ -122,6 +126,13 @@ function VersionDetailModal({
             </>
           ) : (
             <>
+              <button
+                onClick={() => onEditFromVersion?.(version)}
+                disabled={editDisabled}
+                className="h-10 px-4 rounded-base bg-primary text-white font-bold text-sm flex items-center justify-center hover:opacity-90 disabled:opacity-50"
+              >
+                基于此版本修改
+              </button>
               <button
                 onClick={() => setIsEditing(true)}
                 className="w-22 h-10 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
