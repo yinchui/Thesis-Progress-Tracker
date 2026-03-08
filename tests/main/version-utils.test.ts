@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   incrementVersion,
   getLockFilePath,
+  isLockFileForTargetFile,
   supportsAutoArchive,
 } from '../../src/main/version-utils'
 
@@ -70,5 +71,32 @@ describe('supportsAutoArchive', () => {
 
   it('returns false for pdf', () => {
     expect(supportsAutoArchive('pdf')).toBe(false)
+  })
+})
+
+describe('isLockFileForTargetFile', () => {
+  it('matches full-name lock files', () => {
+    expect(isLockFileForTargetFile('~$test.docx', '/tmp/test.docx')).toBe(true)
+  })
+
+  it('matches macOS word lock files that drop one leading character', () => {
+    expect(isLockFileForTargetFile('~$hapter.docx', '/tmp/chapter.docx')).toBe(true)
+  })
+
+  it('matches macOS word lock files that drop two leading characters', () => {
+    expect(
+      isLockFileForTargetFile(
+        '~$rsion_1234567890.docx',
+        '/tmp/version_1234567890.docx',
+      ),
+    ).toBe(true)
+  })
+
+  it('returns false for unrelated lock files', () => {
+    expect(isLockFileForTargetFile('~$other.docx', '/tmp/test.docx')).toBe(false)
+  })
+
+  it('returns false for non-lock files', () => {
+    expect(isLockFileForTargetFile('test.docx', '/tmp/test.docx')).toBe(false)
   })
 })

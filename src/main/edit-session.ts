@@ -3,7 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import log from 'electron-log'
 import { EditSession, EditSessionParams } from './edit-session-types'
-import { supportsAutoArchive } from './version-utils'
+import { isLockFileForTargetFile, supportsAutoArchive } from './version-utils'
 
 let activeSession: EditSession | null = null
 let activeWatcher: fs.FSWatcher | null = null
@@ -139,12 +139,13 @@ export function startLockFileWatch(
   onError: () => void,
 ): void {
   const dir = path.dirname(session.editFilePath)
-  const lockFileName = `~$${path.basename(session.editFilePath)}`
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   try {
     activeWatcher = fs.watch(dir, (_eventType, filename) => {
-      if (filename !== lockFileName) return
+      if (!filename) return
+      const lockFileName = filename.toString()
+      if (!isLockFileForTargetFile(lockFileName, session.editFilePath)) return
 
       const lockPath = path.join(dir, lockFileName)
       if (!fs.existsSync(lockPath)) {
@@ -167,7 +168,7 @@ export function startLockFileWatch(
       onError()
     })
 
-    log.info('Started lock file watch for:', lockFileName)
+    log.info('Started lock file watch for session:', session.newVersionId)
   } catch (err) {
     log.error('Failed to start lock file watch:', err)
     onError()

@@ -32,3 +32,14 @@ export function getLockFilePath(filePath: string): string | null {
   const basename = path.basename(filePath)
   return path.join(dir, `~$${basename}`)
 }
+
+/**
+ * Check whether a lock file name belongs to the given target file.
+ * On macOS Word, the lock file can be "~$" + full basename, or "~$" + a basename suffix.
+ */
+export function isLockFileForTargetFile(lockFileName: string, targetFilePath: string): boolean {
+  if (!lockFileName.startsWith('~$')) return false
+  const basename = path.basename(targetFilePath)
+  const lockSuffix = lockFileName.slice(2)
+  return basename.endsWith(lockSuffix)
+}
