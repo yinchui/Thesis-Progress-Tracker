@@ -57,6 +57,31 @@ const electronAPI = {
   selectDataDir: (): Promise<DataDirStatus | null> => ipcRenderer.invoke('select-data-dir'),
   resetDataDir: (): Promise<DataDirStatus> => ipcRenderer.invoke('reset-data-dir'),
   openDataDir: (): Promise<boolean> => ipcRenderer.invoke('open-data-dir'),
+
+  // Edit session
+  startEditSession: (params: {
+    baseVersionId: string;
+    thesisId: string;
+    baseFilePath: string;
+    baseFileName: string;
+    baseFileType: string;
+    versionInfo: { version: string; changes: string; focus: string };
+    replacementFilePath?: string;
+  }) => ipcRenderer.invoke('start-edit-session', params),
+  cancelEditSession: (): Promise<boolean> => ipcRenderer.invoke('cancel-edit-session'),
+  finishEditSession: (): Promise<boolean> => ipcRenderer.invoke('finish-edit-session'),
+  onEditSessionFinished: (callback: (_event: any, session: any) => void) => {
+    ipcRenderer.on('finish-edit-session', callback);
+  },
+  removeEditSessionListener: () => {
+    ipcRenderer.removeAllListeners('finish-edit-session');
+  },
+  onEditSessionWatchError: (callback: () => void) => {
+    ipcRenderer.on('edit-session-watch-error', (_event) => callback());
+  },
+  getPendingEditSession: () => ipcRenderer.invoke('get-pending-edit-session'),
+  resolvePendingEditSession: (keep: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('resolve-pending-edit-session', keep),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
