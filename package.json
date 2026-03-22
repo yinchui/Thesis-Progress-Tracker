@@ -1,6 +1,6 @@
 {
   "name": "thesis-tracker",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "论文进度管理器 - Thesis Progress Tracker",
   "main": "dist/main/index.js",
   "type": "commonjs",
@@ -14,7 +14,11 @@
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.main.json",
     "dist:win": "electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
+    "dist:mac": "electron-builder --mac dmg --x64",
+    "dist:mac-arm": "electron-builder --mac dmg --arm64",
     "release:local": "npm run build && npm run dist:win",
+    "release:mac": "npm run build && npm run dist:mac",
+    "release:mac-arm": "npm run build && npm run dist:mac-arm",
     "package": "npm run release:local",
     "postinstall": "electron-builder install-app-deps"
   },
