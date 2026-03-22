@@ -28,9 +28,13 @@ export function supportsAutoArchive(ext: string): boolean {
 export function getLockFilePath(filePath: string): string | null {
   const ext = path.extname(filePath).slice(1).toLowerCase()
   if (!supportsAutoArchive(ext)) return null
-  const dir = path.dirname(filePath)
-  const basename = path.basename(filePath)
-  return path.join(dir, `~$${basename}`)
+  // Find last separator and preserve its style (supports both / and \)
+  const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+  if (lastSlash === -1) return `~$${filePath}`
+  const dir = filePath.slice(0, lastSlash)
+  const basename = filePath.slice(lastSlash + 1)
+  const sep = filePath[lastSlash]
+  return `${dir}${sep}~$${basename}`
 }
 
 /**
