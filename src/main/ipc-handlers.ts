@@ -401,12 +401,12 @@ ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) =
   const index = loadThesesIndex(dataDir);
   const thesis = index.theses.find(t => t.id === params.thesisId);
 
-  const session = createEditSession(params, dataDir, thesis?.title);
+  const session = createEditSession(params, dataDir, getUserDataPath(), thesis?.title);
 
   const openResult = await shell.openPath(session.editFilePath);
   if (openResult) {
     log.error('Failed to open file:', openResult);
-    clearSession(dataDir, true);
+    clearSession(getUserDataPath(), true);
     throw new Error(`未找到可打开此文件的程序: ${openResult}`);
   }
 
@@ -414,7 +414,7 @@ ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) =
     startLockFileWatch(
       session,
       () => {
-        const archived = archiveSession(dataDir);
+        const archived = archiveSession(dataDir, getUserDataPath());
         if (archived) {
           const windows = BrowserWindow.getAllWindows();
           if (windows.length > 0) {
@@ -444,7 +444,7 @@ ipcMain.handle('cancel-edit-session', async () => {
 ipcMain.handle('finish-edit-session', async () => {
   log.info('IPC: finish-edit-session (manual)');
   const dataDir = getDataDir();
-  const archived = archiveSession(dataDir);
+  const archived = archiveSession(dataDir, getUserDataPath());
   if (archived) {
     return true;
   }
@@ -452,18 +452,17 @@ ipcMain.handle('finish-edit-session', async () => {
 });
 
 ipcMain.handle('get-pending-edit-session', async () => {
-  const dataDir = getDataDir();
-  return loadPersistedSession(dataDir);
+  return loadPersistedSession(getUserDataPath());
 });
 
 ipcMain.handle('resolve-pending-edit-session', async (_event, keep: boolean) => {
   const dataDir = getDataDir();
   if (keep) {
-    const archived = archiveSession(dataDir);
+    const archived = archiveSession(dataDir, getUserDataPath());
     return archived !== null;
   }
 
-  clearSession(dataDir, true);
+  clearSession(getUserDataPath(), true);
   return true;
 });
 
@@ -497,7 +496,7 @@ export function initializeApp(): void {
     saveLocalState(userDataPath, { currentThesisId: index.theses[0]?.id || null });
   }
 
-  const persisted = loadPersistedSession(dataDir);
+  const persisted = loadPersistedSession(userDataPath);
   if (persisted) {
     log.info('Found unfinished edit session:', persisted.newVersionId);
   }

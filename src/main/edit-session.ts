@@ -5,6 +5,14 @@ import * as path from 'path'
 import log from 'electron-log'
 import { EditSession, EditSessionParams } from './edit-session-types'
 import { isLockFileForTargetFile, supportsAutoArchive } from './version-utils'
+import {
+  loadThesesIndex,
+  saveThesesIndex,
+  loadThesisVersions,
+  saveThesisVersions,
+  getThesisDir,
+  VersionRecord,
+} from './split-data-store'
 
 let activeSession: EditSession | null = null
 let activeWatcher: fs.FSWatcher | null = null
@@ -18,7 +26,7 @@ export function getActiveSession(): EditSession | null {
  * Create a new edit session: copy file, persist session, return session object.
  * Does NOT open the file or start watching — caller handles that.
  */
-export function createEditSession(params: EditSessionParams, dataDir: string, thesisTitle?: string): EditSession {
+export function createEditSession(params: EditSessionParams, dataDir: string, userDataPath: string, thesisTitle?: string): EditSession {
   if (activeSession) {
     throw new Error('已有一个编辑会话正在进行中，请先完成或取消当前编辑。')
   }
@@ -32,7 +40,7 @@ export function createEditSession(params: EditSessionParams, dataDir: string, th
   const dirName = thesisTitle
     ? thesisTitle.replace(/[/\\:*?"<>|]/g, '_').trim() || 'untitled'
     : `thesis_${params.thesisId}`
-  const thesisFilesDir = path.join(dataDir, 'files', dirName)
+  const thesisFilesDir = path.join(dataDir, dirName)
   if (!fs.existsSync(thesisFilesDir)) {
     fs.mkdirSync(thesisFilesDir, { recursive: true })
   }
@@ -66,7 +74,7 @@ export function createEditSession(params: EditSessionParams, dataDir: string, th
   }
 
   activeSession = session
-  persistSession(dataDir, session)
+  persistSession(userDataPath, session)
   log.info('Edit session created:', session.newVersionId)
 
   return session
@@ -76,39 +84,46 @@ export function createEditSession(params: EditSessionParams, dataDir: string, th
  * Archive the active session: write version to data.json, clean up session.
  * Returns the archived session for notification purposes.
  */
-export function archiveSession(dataDir: string): EditSession | null {
+export function archiveSession(dataDir: string, userDataPath: string): EditSession | null {
   if (!activeSession) {
     log.warn('No active session to archive')
     return null
   }
 
   const session = { ...activeSession }
-  const dataFilePath = path.join(dataDir, 'data.json')
 
   try {
-    const raw = fs.readFileSync(dataFilePath, 'utf-8')
-    const data = JSON.parse(raw)
+    const index = loadThesesIndex(dataDir)
+    const thesis = index.theses.find(t => t.id === session.thesisId)
+    if (!thesis) {
+      log.error('Thesis not found for session:', session.thesisId)
+      return null
+    }
 
-    const newVersion = {
+    const relativeFilePath = path.basename(session.editFilePath)
+
+    const newVersion: VersionRecord = {
       id: session.newVersionId,
       thesisId: session.thesisId,
       version: session.versionInfo.version,
       date: session.date,
       changes: session.versionInfo.changes,
       focus: session.versionInfo.focus,
-      filePath: session.editFilePath,
+      filePath: relativeFilePath,
       fileName: session.fileName,
       fileType: session.fileType,
     }
 
-    data.versions.unshift(newVersion)
+    const versionsData = loadThesisVersions(dataDir, thesis.title)
+    versionsData.versions.unshift(newVersion)
+    saveThesisVersions(dataDir, thesis.title, versionsData)
 
-    const thesisIndex = data.theses.findIndex((t: any) => t.id === session.thesisId)
-    if (thesisIndex !== -1) {
-      data.theses[thesisIndex].updatedAt = new Date().toISOString()
+    const thesisIdx = index.theses.findIndex(t => t.id === session.thesisId)
+    if (thesisIdx !== -1) {
+      index.theses[thesisIdx].updatedAt = new Date().toISOString()
+      saveThesesIndex(dataDir, index)
     }
 
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8')
     log.info('Version archived:', session.newVersionId)
   } catch (error) {
     log.error('Error archiving session:', error)
@@ -117,7 +132,7 @@ export function archiveSession(dataDir: string): EditSession | null {
 
   activeSession = null
   stopWatcher()
-  removePersistedSession(dataDir)
+  removePersistedSession(userDataPath)
 
   return session
 }
@@ -125,7 +140,7 @@ export function archiveSession(dataDir: string): EditSession | null {
 /**
  * Clear the active session. If deleteFile=true, also delete the copied file.
  */
-export function clearSession(dataDir?: string, deleteFile?: boolean): void {
+export function clearSession(userDataPath?: string, deleteFile?: boolean): void {
   if (deleteFile && activeSession && fs.existsSync(activeSession.editFilePath)) {
     try {
       fs.unlinkSync(activeSession.editFilePath)
@@ -138,8 +153,8 @@ export function clearSession(dataDir?: string, deleteFile?: boolean): void {
   activeSession = null
   stopWatcher()
 
-  if (dataDir) {
-    removePersistedSession(dataDir)
+  if (userDataPath) {
+    removePersistedSession(userDataPath)
   }
 }
 
@@ -233,24 +248,23 @@ export function stopWatcher(): void {
   }
 }
 
-function persistSession(dataDir: string, session: EditSession): void {
-  const filePath = path.join(dataDir, 'edit-session.json')
-  fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8')
+function getSessionFilePath(userDataPath: string): string {
+  return path.join(userDataPath, 'edit-session.json')
 }
 
-function removePersistedSession(dataDir: string): void {
-  const filePath = path.join(dataDir, 'edit-session.json')
+function persistSession(userDataPath: string, session: EditSession): void {
+  fs.writeFileSync(getSessionFilePath(userDataPath), JSON.stringify(session, null, 2), 'utf-8')
+}
+
+function removePersistedSession(userDataPath: string): void {
+  const filePath = getSessionFilePath(userDataPath)
   if (fs.existsSync(filePath)) {
-    try {
-      fs.unlinkSync(filePath)
-    } catch (e) {
-      log.error('Error removing persisted session:', e)
-    }
+    try { fs.unlinkSync(filePath) } catch (e) { log.error('Error removing persisted session:', e) }
   }
 }
 
-export function loadPersistedSession(dataDir: string): EditSession | null {
-  const filePath = path.join(dataDir, 'edit-session.json')
+export function loadPersistedSession(userDataPath: string): EditSession | null {
+  const filePath = getSessionFilePath(userDataPath)
   try {
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf-8')
