@@ -15,11 +15,15 @@ let tmpDir: string
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edit-session-test-'))
+  // Set up thesis files dir
   fs.mkdirSync(path.join(tmpDir, 'files', 'thesis_t1'), { recursive: true })
   fs.writeFileSync(path.join(tmpDir, 'files', 'thesis_t1', 'version_base.docx'), 'base content')
-  fs.writeFileSync(path.join(tmpDir, 'data.json'), JSON.stringify({
+  // Set up split-data-store files: theses-index.json and Test/versions.json
+  fs.writeFileSync(path.join(tmpDir, 'theses-index.json'), JSON.stringify({
     theses: [{ id: 't1', title: 'Test', createdAt: '', updatedAt: '' }],
-    currentThesisId: 't1',
+  }))
+  fs.mkdirSync(path.join(tmpDir, 'Test'), { recursive: true })
+  fs.writeFileSync(path.join(tmpDir, 'Test', 'versions.json'), JSON.stringify({
     versions: [{
       id: 'base',
       thesisId: 't1',
@@ -27,7 +31,7 @@ beforeEach(() => {
       date: '2026-01-01',
       changes: 'init',
       focus: 'intro',
-      filePath: path.join(tmpDir, 'files', 'thesis_t1', 'version_base.docx'),
+      filePath: 'version_base.docx',
       fileName: 'thesis.docx',
       fileType: 'DOCX',
     }],
@@ -48,7 +52,7 @@ describe('createEditSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'updated intro', focus: 'chapter 1' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     expect(session.autoArchive).toBe(true)
     expect(session.newVersionId).toBeTruthy()
@@ -67,7 +71,7 @@ describe('createEditSession', () => {
       baseFileName: 'thesis.txt',
       baseFileType: 'TXT',
       versionInfo: { version: 'v1.1', changes: 'edit', focus: 'body' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     expect(session.autoArchive).toBe(false)
   })
@@ -80,7 +84,7 @@ describe('createEditSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'c', focus: 'f' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     const persisted = JSON.parse(fs.readFileSync(path.join(tmpDir, 'edit-session.json'), 'utf-8'))
     expect(persisted.newVersionId).toBeTruthy()
@@ -94,7 +98,7 @@ describe('createEditSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'c', focus: 'f' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     expect(() => createEditSession({
       baseVersionId: 'base',
@@ -103,7 +107,7 @@ describe('createEditSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.2', changes: 'c', focus: 'f' },
-    }, tmpDir)).toThrow()
+    }, tmpDir, tmpDir)).toThrow()
   })
 })
 
@@ -116,7 +120,7 @@ describe('clearSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'c', focus: 'f' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     const editFilePath = session.editFilePath
     clearSession(tmpDir, true)
@@ -128,7 +132,7 @@ describe('clearSession', () => {
 })
 
 describe('archiveSession', () => {
-  it('writes version to data.json and cleans up session', () => {
+  it('writes version to versions.json and cleans up session', () => {
     const session = createEditSession({
       baseVersionId: 'base',
       thesisId: 't1',
@@ -136,14 +140,14 @@ describe('archiveSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'updated', focus: 'intro' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
-    archiveSession(tmpDir)
+    archiveSession(tmpDir, tmpDir)
 
     expect(getActiveSession()).toBeNull()
     expect(fs.existsSync(path.join(tmpDir, 'edit-session.json'))).toBe(false)
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, 'data.json'), 'utf-8'))
+    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, 'Test', 'versions.json'), 'utf-8'))
     expect(data.versions).toHaveLength(2)
     expect(data.versions[0].version).toBe('v1.1')
     expect(data.versions[0].id).toBe(session.newVersionId)
@@ -164,7 +168,7 @@ describe('loadPersistedSession', () => {
       baseFileName: 'thesis.docx',
       baseFileType: 'DOCX',
       versionInfo: { version: 'v1.1', changes: 'c', focus: 'f' },
-    }, tmpDir)
+    }, tmpDir, tmpDir)
 
     clearSession()
 
