@@ -48,8 +48,8 @@ const electronAPI = {
 
   // File operations
   selectFile: (): Promise<string | null> => ipcRenderer.invoke('select-file'),
-  copyFile: (sourcePath: string, versionId: string): Promise<string | null> =>
-    ipcRenderer.invoke('copy-file', sourcePath, versionId),
+  copyFile: (sourcePath: string, versionId: string, thesisId: string): Promise<string | null> =>
+    ipcRenderer.invoke('copy-file', sourcePath, versionId, thesisId),
   openFile: (filePath: string): Promise<boolean> => ipcRenderer.invoke('open-file', filePath),
 
   // Directory operations

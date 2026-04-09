@@ -58,7 +58,7 @@ export interface ElectronAPI {
 
   // 文件操作
   selectFile: () => Promise<string | null>
-  copyFile: (sourcePath: string, versionId: string) => Promise<string | null>
+  copyFile: (sourcePath: string, versionId: string, thesisId: string) => Promise<string | null>
   openFile: (filePath: string) => Promise<boolean>
 
   // 目录操作
