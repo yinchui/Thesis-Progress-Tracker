@@ -82,6 +82,7 @@ export interface ElectronAPI {
   onEditSessionFinished: (callback: (event: any, session: EditSession) => void) => void
   removeEditSessionListener: () => void
   onEditSessionWatchError: (callback: () => void) => void
+  removeEditSessionWatchErrorListener: () => void
   getPendingEditSession: () => Promise<EditSession | null>
   resolvePendingEditSession: (keep: boolean) => Promise<boolean>
 

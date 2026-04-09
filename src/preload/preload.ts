@@ -79,6 +79,9 @@ const electronAPI = {
   onEditSessionWatchError: (callback: () => void) => {
     ipcRenderer.on('edit-session-watch-error', (_event) => callback());
   },
+  removeEditSessionWatchErrorListener: () => {
+    ipcRenderer.removeAllListeners('edit-session-watch-error')
+  },
   getPendingEditSession: () => ipcRenderer.invoke('get-pending-edit-session'),
   resolvePendingEditSession: (keep: boolean): Promise<boolean> =>
     ipcRenderer.invoke('resolve-pending-edit-session', keep),

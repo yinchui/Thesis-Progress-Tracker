@@ -354,6 +354,7 @@ ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string
     const destPath = uniqueFilePath(thesisDir, destFileName);
 
     fs.copyFileSync(sourcePath, destPath);
+    silenceWatcher();
     return destPath;
   } catch (error) {
     log.error('Error copying file:', error);
@@ -462,6 +463,7 @@ ipcMain.handle('finish-edit-session', async () => {
   const dataDir = getDataDir();
   const archived = archiveSession(dataDir, getUserDataPath());
   if (archived) {
+    silenceWatcher();
     return true;
   }
   return false;
@@ -475,6 +477,9 @@ ipcMain.handle('resolve-pending-edit-session', async (_event, keep: boolean) => 
   const dataDir = getDataDir();
   if (keep) {
     const archived = archiveSession(dataDir, getUserDataPath());
+    if (archived !== null) {
+      silenceWatcher();
+    }
     return archived !== null;
   }
 
