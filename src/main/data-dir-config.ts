@@ -97,17 +97,88 @@ export function resolveRuntimeDataDirStatus(input: RuntimeResolutionInput): Data
   })
 }
 
+export function migrateDataFiles(oldPath: string, newPath: string): boolean {
+  try {
+    if (path.resolve(oldPath) === path.resolve(newPath)) {
+      return true
+    }
+
+    if (!fs.existsSync(oldPath)) {
+      return true
+    }
+
+    let migratedCount = 0
+
+    const oldDataFile = path.join(oldPath, 'data.json')
+    const newDataFile = path.join(newPath, 'data.json')
+    if (fs.existsSync(oldDataFile) && !fs.existsSync(newDataFile)) {
+      fs.copyFileSync(oldDataFile, newDataFile)
+      migratedCount++
+    }
+
+    const oldFilesDir = path.join(oldPath, 'files')
+    const newFilesDir = path.join(newPath, 'files')
+    if (fs.existsSync(oldFilesDir)) {
+      copyDirRecursive(oldFilesDir, newFilesDir)
+      migratedCount++
+    }
+
+    for (const fileName of ['edit-session.json', 'edit-session-lock']) {
+      const oldFile = path.join(oldPath, fileName)
+      const newFile = path.join(newPath, fileName)
+      if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
+        fs.copyFileSync(oldFile, newFile)
+        migratedCount++
+      }
+    }
+
+    console.log(`Data migration completed: ${migratedCount} items migrated from ${oldPath} to ${newPath}`)
+    return true
+  } catch (error) {
+    console.error('Data migration failed:', error)
+    return false
+  }
+}
+
 export function setCustomDataDir(input: RuntimeResolutionInput, selectedDir: string): DataDirStatus {
   const normalized = path.resolve(selectedDir)
   if (!ensureWritableDir(normalized)) {
     throw new Error('Selected directory is not writable')
   }
 
+  const oldStatus = resolveRuntimeDataDirStatus(input)
+  const oldPath = oldStatus.effectivePath
+
   writeConfig(input.configFilePath, { customDir: normalized })
-  return resolveRuntimeDataDirStatus(input)
+  const newStatus = resolveRuntimeDataDirStatus(input)
+
+  migrateDataFiles(oldPath, newStatus.effectivePath)
+
+  return newStatus
 }
 
 export function resetCustomDataDir(input: RuntimeResolutionInput): DataDirStatus {
   writeConfig(input.configFilePath, {})
   return resolveRuntimeDataDirStatus(input)
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true })
+  }
+
+  const entries = fs.readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath)
+      continue
+    }
+
+    if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(srcPath, destPath)
+    }
+  }
 }
