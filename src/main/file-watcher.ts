@@ -89,6 +89,9 @@ export function createFileWatcher(dataDir: string, callbacks: FileWatcherCallbac
 
       watcher.on('add', handleChange)
       watcher.on('change', handleChange)
+      watcher.on('error', (err) => {
+        log.error('File watcher error:', err)
+      })
 
       log.info('File watcher started on:', dataDir)
     },
