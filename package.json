@@ -1,6 +1,6 @@
 {
   "name": "thesis-tracker",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "论文进度管理器 - Thesis Progress Tracker",
   "main": "dist/main/index.js",
   "type": "commonjs",
