@@ -84,6 +84,21 @@ export interface ElectronAPI {
   onEditSessionWatchError: (callback: () => void) => void
   getPendingEditSession: () => Promise<EditSession | null>
   resolvePendingEditSession: (keep: boolean) => Promise<boolean>
+
+  // 更新
+  getAppVersion: () => Promise<string>
+  checkForUpdate: () => Promise<UpdateInfo>
+  downloadUpdate: (url: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  onUpdateProgress: (callback: (percent: number) => void) => void
+  removeUpdateProgressListener: () => void
+}
+
+export interface UpdateInfo {
+  hasUpdate: boolean
+  currentVersion: string
+  latestVersion: string
+  downloadUrl?: string
+  releaseNotes?: string
 }
 
 declare global {

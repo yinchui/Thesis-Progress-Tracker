@@ -19,6 +19,7 @@ import {
   startLockFileWatch,
 } from './edit-session';
 import { EditSessionParams } from './edit-session-types';
+import './updater';
 
 // ==================== 绫诲瀷瀹氫箟 ====================
 
@@ -74,8 +75,25 @@ function getDataFilePath(): string {
 }
 
 // 鑾峰彇璁烘枃鏂囦欢瀛樺偍鐩綍
-function getThesisFilesDir(thesisId: string): string {
-  const dir = path.join(getDataDir(), 'files', `thesis_${thesisId}`);
+function getThesisFilesDir(thesisTitle: string, thesisId?: string): string {
+  const sanitized = sanitizeFileName(thesisTitle);
+  const dir = path.join(getDataDir(), 'files', sanitized);
+
+  // 如果新格式目录不存在，检查旧 UUID 格式并自动迁移
+  if (!fs.existsSync(dir) && thesisId) {
+    const oldDir = path.join(getDataDir(), 'files', `thesis_${thesisId}`);
+    if (fs.existsSync(oldDir)) {
+      try {
+        fs.renameSync(oldDir, dir);
+        log.info(`Migrated thesis dir: thesis_${thesisId} -> ${sanitized}`);
+        return dir;
+      } catch (e) {
+        log.error('Error migrating thesis dir:', e);
+        return oldDir;
+      }
+    }
+  }
+
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -85,6 +103,26 @@ function getThesisFilesDir(thesisId: string): string {
 // 鐢熸垚 UUID
 function generateId(): string {
   return crypto.randomUUID();
+}
+
+// 文件名安全化处理
+function sanitizeFileName(name: string): string {
+  return name.replace(/[/\\:*?"<>|]/g, '_').trim() || 'untitled';
+}
+
+// 生成不重复的文件路径
+function uniqueFilePath(dir: string, fileName: string): string {
+  let filePath = path.join(dir, fileName);
+  if (!fs.existsSync(filePath)) return filePath;
+
+  const ext = path.extname(fileName);
+  const base = path.basename(fileName, ext);
+  let counter = 2;
+  while (fs.existsSync(filePath)) {
+    filePath = path.join(dir, `${base}_${counter}${ext}`);
+    counter++;
+  }
+  return filePath;
 }
 
 // 鍔犺浇鏁版嵁
@@ -145,12 +183,13 @@ function ensureDefaultThesis(): AppData {
           log.info(`Migrated ${oldVersions.length} old versions to default thesis`);
 
           // 绉诲姩鏃ф枃浠跺埌鏂扮洰褰?
-          const thesisFilesDir = getThesisFilesDir(defaultThesis.id);
+          const thesisFilesDir = getThesisFilesDir(defaultThesis.title, defaultThesis.id);
           for (const v of data.versions) {
             if (v.filePath && fs.existsSync(v.filePath)) {
               const ext = path.extname(v.filePath);
-              const newFileName = `version_${v.id}${ext}`;
-              const newFilePath = path.join(thesisFilesDir, newFileName);
+              const baseName = v.fileName ? path.basename(v.fileName, ext) : v.id;
+              const newFileName = `${sanitizeFileName(v.version)}_${sanitizeFileName(baseName)}${ext}`;
+              const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
               try {
                 fs.copyFileSync(v.filePath, newFilePath);
                 v.filePath = newFilePath;
@@ -205,7 +244,7 @@ ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; desc
   };
 
   // 鍒涘缓璁烘枃鏂囦欢鐩綍
-  getThesisFilesDir(newThesis.id);
+  getThesisFilesDir(newThesis.title, newThesis.id);
 
   data.theses.push(newThesis);
   data.currentThesisId = newThesis.id;
@@ -223,11 +262,33 @@ ipcMain.handle('update-thesis', async (_event, id: string, updates: { title?: st
   const index = data.theses.findIndex(t => t.id === id);
 
   if (index !== -1) {
+    const oldTitle = data.theses[index].title;
+
     data.theses[index] = {
       ...data.theses[index],
       ...updates,
       updatedAt: new Date().toISOString()
     };
+
+    // 标题变更时重命名文件夹并更新版本路径
+    if (updates.title && updates.title !== oldTitle) {
+      const oldDir = path.join(getDataDir(), 'files', sanitizeFileName(oldTitle));
+      const newDir = path.join(getDataDir(), 'files', sanitizeFileName(updates.title));
+      if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+        try {
+          fs.renameSync(oldDir, newDir);
+          // 更新该论文所有版本的 filePath
+          for (const v of data.versions) {
+            if (v.thesisId === id && v.filePath && v.filePath.startsWith(oldDir)) {
+              v.filePath = v.filePath.replace(oldDir, newDir);
+            }
+          }
+          log.info(`Renamed thesis dir: ${oldTitle} -> ${updates.title}`);
+        } catch (e) {
+          log.error('Error renaming thesis dir:', e);
+        }
+      }
+    }
 
     if (saveData(data)) {
       return data.theses[index];
@@ -260,7 +321,10 @@ ipcMain.handle('delete-thesis', async (_event, id: string) => {
   }
 
   // 鍒犻櫎璁烘枃鏂囦欢鐩綍
-  const thesisFilesDir = path.join(getDataDir(), 'files', `thesis_${id}`);
+  const thesis = data.theses.find(t => t.id === id);
+  const thesisFilesDir = thesis
+    ? path.join(getDataDir(), 'files', sanitizeFileName(thesis.title))
+    : path.join(getDataDir(), 'files', `thesis_${id}`);
   if (fs.existsSync(thesisFilesDir)) {
     try {
       fs.rmSync(thesisFilesDir, { recursive: true, force: true });
@@ -340,10 +404,12 @@ ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string
 
   // 濡傛灉鏈夋枃浠讹紝澶嶅埗鍒拌鏂囩洰褰?
   if (versionData.filePath && fs.existsSync(versionData.filePath)) {
-    const thesisFilesDir = getThesisFilesDir(targetThesisId);
+    const targetThesis = data.theses.find(t => t.id === targetThesisId);
+    const thesisFilesDir = getThesisFilesDir(targetThesis?.title || targetThesisId, targetThesisId);
     const ext = path.extname(versionData.filePath);
-    const newFileName = `version_${newVersion.id}${ext}`;
-    const newFilePath = path.join(thesisFilesDir, newFileName);
+    const baseName = versionData.fileName ? path.basename(versionData.fileName, ext) : newVersion.id;
+    const newFileName = `${sanitizeFileName(versionData.version)}_${sanitizeFileName(baseName)}${ext}`;
+    const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
 
     try {
       fs.copyFileSync(versionData.filePath, newFilePath);
@@ -376,10 +442,13 @@ ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
     // 濡傛灉鏇存柊浜嗘枃浠讹紝闇€瑕佺Щ鍔ㄥ埌姝ｇ‘鐨勮鏂囩洰褰?
     if (updates.filePath && updates.filePath !== data.versions[index].filePath) {
       const thesisId = data.versions[index].thesisId;
-      const thesisFilesDir = getThesisFilesDir(thesisId);
+      const thesis = data.theses.find(t => t.id === thesisId);
+      const thesisFilesDir = getThesisFilesDir(thesis?.title || thesisId, thesisId);
       const ext = path.extname(updates.filePath);
-      const newFileName = `version_${id}${ext}`;
-      const newFilePath = path.join(thesisFilesDir, newFileName);
+      const ver = data.versions[index].version || id;
+      const baseName = data.versions[index].fileName ? path.basename(data.versions[index].fileName, ext) : id;
+      const newFileName = `${sanitizeFileName(ver)}_${sanitizeFileName(baseName)}${ext}`;
+      const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
 
       try {
         if (fs.existsSync(updates.filePath)) {
@@ -440,10 +509,15 @@ ipcMain.handle('select-file', async () => {
 ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string, thesisId: string) => {
   log.info('IPC: copy-file', sourcePath, versionId, thesisId);
   try {
+    const data = loadData();
+    const thesis = data.theses.find(t => t.id === thesisId);
+    const version = data.versions.find(v => v.id === versionId);
     const ext = path.extname(sourcePath);
-    const thesisFilesDir = getThesisFilesDir(thesisId);
-    const destFileName = `version_${versionId}${ext}`;
-    const destPath = path.join(thesisFilesDir, destFileName);
+    const thesisFilesDir = getThesisFilesDir(thesis?.title || thesisId, thesisId);
+    const baseName = path.basename(sourcePath, ext);
+    const ver = version?.version || versionId;
+    const destFileName = `${sanitizeFileName(ver)}_${sanitizeFileName(baseName)}${ext}`;
+    const destPath = uniqueFilePath(thesisFilesDir, destFileName);
 
     fs.copyFileSync(sourcePath, destPath);
     return destPath;
@@ -506,8 +580,10 @@ ipcMain.handle('open-data-dir', async () => {
 ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) => {
   log.info('IPC: start-edit-session', params.baseVersionId);
   const dataDir = getDataDir();
+  const data = loadData();
+  const thesis = data.theses.find(t => t.id === params.thesisId);
 
-  const session = createEditSession(params, dataDir);
+  const session = createEditSession(params, dataDir, thesis?.title);
 
   const openResult = await shell.openPath(session.editFilePath);
   if (openResult) {

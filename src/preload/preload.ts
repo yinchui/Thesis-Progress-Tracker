@@ -82,6 +82,17 @@ const electronAPI = {
   getPendingEditSession: () => ipcRenderer.invoke('get-pending-edit-session'),
   resolvePendingEditSession: (keep: boolean): Promise<boolean> =>
     ipcRenderer.invoke('resolve-pending-edit-session', keep),
+
+  // Update
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  downloadUpdate: (url: string) => ipcRenderer.invoke('download-update', url),
+  onUpdateProgress: (callback: (percent: number) => void) => {
+    ipcRenderer.on('update-download-progress', (_e, percent) => callback(percent));
+  },
+  removeUpdateProgressListener: () => {
+    ipcRenderer.removeAllListeners('update-download-progress');
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

@@ -166,7 +166,7 @@ function EditVersionModal({
         <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="w-22 h-10 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
+            className="h-10 px-5 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
           >
             取消
           </button>

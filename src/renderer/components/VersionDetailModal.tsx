@@ -117,13 +117,13 @@ function VersionDetailModal({
             <>
               <button
                 onClick={() => setIsEditing(false)}
-                className="w-22 h-10 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
+                className="h-10 px-5 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
               >
                 取消
               </button>
               <button
                 onClick={handleSave}
-                className="w-22 h-10 rounded-base bg-primary text-white font-bold text-sm flex items-center justify-center hover:opacity-90"
+                className="h-10 px-5 rounded-base bg-primary text-white font-bold text-sm flex items-center justify-center hover:opacity-90"
               >
                 保存
               </button>
@@ -139,13 +139,13 @@ function VersionDetailModal({
               </button>
               <button
                 onClick={() => setIsEditing(true)}
-                className="w-22 h-10 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
+                className="h-10 px-5 rounded-base border border-border text-text font-bold text-sm flex items-center justify-center hover:bg-gray-50"
               >
                 编辑
               </button>
               <button
                 onClick={handleDelete}
-                className="w-22 h-10 rounded-base bg-danger text-white font-bold text-sm flex items-center justify-center hover:opacity-90"
+                className="h-10 px-5 rounded-base bg-danger text-white font-bold text-sm flex items-center justify-center hover:opacity-90"
               >
                 删除
               </button>

@@ -18,7 +18,7 @@ export function getActiveSession(): EditSession | null {
  * Create a new edit session: copy file, persist session, return session object.
  * Does NOT open the file or start watching — caller handles that.
  */
-export function createEditSession(params: EditSessionParams, dataDir: string): EditSession {
+export function createEditSession(params: EditSessionParams, dataDir: string, thesisTitle?: string): EditSession {
   if (activeSession) {
     throw new Error('已有一个编辑会话正在进行中，请先完成或取消当前编辑。')
   }
@@ -29,13 +29,25 @@ export function createEditSession(params: EditSessionParams, dataDir: string): E
   const autoArchive = supportsAutoArchive(ext.slice(1))
 
   const sourceFilePath = params.replacementFilePath || params.baseFilePath
-  const thesisFilesDir = path.join(dataDir, 'files', `thesis_${params.thesisId}`)
+  const dirName = thesisTitle
+    ? thesisTitle.replace(/[/\\:*?"<>|]/g, '_').trim() || 'untitled'
+    : `thesis_${params.thesisId}`
+  const thesisFilesDir = path.join(dataDir, 'files', dirName)
   if (!fs.existsSync(thesisFilesDir)) {
     fs.mkdirSync(thesisFilesDir, { recursive: true })
   }
 
-  const editFileName = `version_${newVersionId}${ext}`
-  const editFilePath = path.join(thesisFilesDir, editFileName)
+  const baseName = path.basename(params.baseFileName, ext)
+  const ver = params.versionInfo.version || newVersionId
+  const editFileName = `${ver.replace(/[/\\:*?"<>|]/g, '_')}_${baseName.replace(/[/\\:*?"<>|]/g, '_')}${ext}`
+  let editFilePath = path.join(thesisFilesDir, editFileName)
+  if (fs.existsSync(editFilePath)) {
+    let counter = 2
+    while (fs.existsSync(editFilePath)) {
+      editFilePath = path.join(thesisFilesDir, `${ver.replace(/[/\\:*?"<>|]/g, '_')}_${baseName.replace(/[/\\:*?"<>|]/g, '_')}_${counter}${ext}`)
+      counter++
+    }
+  }
   fs.copyFileSync(sourceFilePath, editFilePath)
 
   const now = new Date()
