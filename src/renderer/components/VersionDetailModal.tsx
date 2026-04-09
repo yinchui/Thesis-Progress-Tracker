@@ -22,14 +22,14 @@ function VersionDetailModal({
 }: VersionDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editVersion, setEditVersion] = useState(version.version)
-  const [editChanges, setEditChanges] = useState(version.changes)
-  const [editFocus, setEditFocus] = useState(version.focus)
+  const [editChanges, setEditChanges] = useState(version.changes ?? '')
+  const [editFocus, setEditFocus] = useState(version.focus ?? '')
 
   const handleSave = () => {
     onUpdate(version.id, {
       version: editVersion,
-      changes: editChanges,
-      focus: editFocus,
+      changes: editChanges || undefined,
+      focus: editFocus || undefined,
     })
     setIsEditing(false)
   }
@@ -77,7 +77,9 @@ function VersionDetailModal({
               className="rounded-base border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
             />
           ) : (
-            <p className="text-text text-sm">{version.changes}</p>
+            <p className={`text-sm ${version.changes ? 'text-text' : 'text-muted'}`}>
+              {version.changes || '未填写'}
+            </p>
           )}
         </div>
 
@@ -92,7 +94,9 @@ function VersionDetailModal({
               className="h-10 rounded-base border border-border px-3 text-sm focus:outline-none focus:border-primary"
             />
           ) : (
-            <p className="text-text text-sm">{version.focus}</p>
+            <p className={`text-sm ${version.focus ? 'text-text' : 'text-muted'}`}>
+              {version.focus || '未填写'}
+            </p>
           )}
         </div>
 

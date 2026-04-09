@@ -2,13 +2,38 @@ import { useState, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { Version } from '../App'
 
+function generateNextVersion(existingVersions: Version[]): string {
+  const today = new Date()
+  const datePrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+  let maxSuffix = 0
+  for (const existingVersion of existingVersions) {
+    if (!existingVersion.version.startsWith(datePrefix)) {
+      continue
+    }
+
+    const match = existingVersion.version.match(/-(\d+)$/)
+    if (!match) {
+      continue
+    }
+
+    const suffix = Number.parseInt(match[1], 10)
+    if (suffix > maxSuffix) {
+      maxSuffix = suffix
+    }
+  }
+
+  return `${datePrefix}-${maxSuffix + 1}`
+}
+
 interface UploadModalProps {
+  versions: Version[]
   onClose: () => void
   onSubmit: (version: Omit<Version, 'thesisId'>) => void
 }
 
-function UploadModal({ onClose, onSubmit }: UploadModalProps) {
-  const [version, setVersion] = useState('')
+function UploadModal({ versions, onClose, onSubmit }: UploadModalProps) {
+  const [version, setVersion] = useState(() => generateNextVersion(versions))
   const [changes, setChanges] = useState('')
   const [focus, setFocus] = useState('')
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -50,8 +75,8 @@ function UploadModal({ onClose, onSubmit }: UploadModalProps) {
   }
 
   const handleSubmit = async () => {
-    if (!version || !changes || !focus || !selectedFile) {
-      alert('请填写所有必填项')
+    if (!version || !selectedFile) {
+      alert('请填写版本号并选择文件')
       return
     }
 
@@ -67,8 +92,8 @@ function UploadModal({ onClose, onSubmit }: UploadModalProps) {
       id,
       version,
       date: dateStr,
-      changes,
-      focus,
+      changes: changes || undefined,
+      focus: focus || undefined,
       filePath: selectedFile, // Backend will copy this
       fileName,
       fileType,
@@ -138,14 +163,14 @@ function UploadModal({ onClose, onSubmit }: UploadModalProps) {
               type="text"
               value={version}
               onChange={(e) => setVersion(e.target.value)}
-              placeholder="例如：v1.0"
+              placeholder="例如：2026-04-09-1"
               className="h-10 rounded-base border border-border px-3 text-sm focus:outline-none focus:border-primary"
             />
           </div>
 
           {/* Changes */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-text font-bold text-xs">修改内容</label>
+            <label className="text-text font-bold text-xs">修改内容（选填）</label>
             <textarea
               value={changes}
               onChange={(e) => setChanges(e.target.value)}
@@ -157,7 +182,7 @@ function UploadModal({ onClose, onSubmit }: UploadModalProps) {
 
           {/* Focus */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-text font-bold text-xs">当前重点</label>
+            <label className="text-text font-bold text-xs">当前重点（选填）</label>
             <input
               type="text"
               value={focus}

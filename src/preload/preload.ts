@@ -13,8 +13,8 @@ export interface Version {
   thesisId: string;
   version: string;
   date: string;
-  changes: string;
-  focus: string;
+  changes?: string;
+  focus?: string;
   filePath: string;
   fileName: string;
   fileType: string;
@@ -65,7 +65,7 @@ const electronAPI = {
     baseFilePath: string;
     baseFileName: string;
     baseFileType: string;
-    versionInfo: { version: string; changes: string; focus: string };
+    versionInfo: { version: string; changes?: string; focus?: string };
     replacementFilePath?: string;
   }) => ipcRenderer.invoke('start-edit-session', params),
   cancelEditSession: (): Promise<boolean> => ipcRenderer.invoke('cancel-edit-session'),

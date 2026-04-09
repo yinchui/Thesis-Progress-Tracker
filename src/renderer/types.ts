@@ -32,8 +32,8 @@ export interface EditSession {
   thesisId: string
   versionInfo: {
     version: string
-    changes: string
-    focus: string
+    changes?: string
+    focus?: string
   }
   editFilePath: string
   fileName: string
@@ -74,7 +74,7 @@ export interface ElectronAPI {
     baseFilePath: string
     baseFileName: string
     baseFileType: string
-    versionInfo: { version: string; changes: string; focus: string }
+    versionInfo: { version: string; changes?: string; focus?: string }
     replacementFilePath?: string
   }) => Promise<EditSession>
   cancelEditSession: () => Promise<boolean>

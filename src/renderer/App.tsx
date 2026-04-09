@@ -13,8 +13,8 @@ export interface Version {
   thesisId: string
   version: string
   date: string
-  changes: string
-  focus: string
+  changes?: string
+  focus?: string
   filePath: string
   fileName: string
   fileType: string
@@ -259,8 +259,8 @@ function App() {
 
   const handleStartEditSession = async (versionInfo: {
     version: string
-    changes: string
-    focus: string
+    changes?: string
+    focus?: string
     replacementFilePath?: string
   }) => {
     if (!editBaseVersion || !currentThesisId) return
@@ -351,6 +351,7 @@ function App() {
       {/* Upload Modal */}
       {showUploadModal && (
         <UploadModal
+          versions={versions}
           onClose={() => setShowUploadModal(false)}
           onSubmit={handleAddVersion}
         />

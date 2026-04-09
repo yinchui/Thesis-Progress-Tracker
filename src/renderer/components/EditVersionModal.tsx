@@ -7,8 +7,8 @@ interface EditVersionModalProps {
   onClose: () => void
   onSubmit: (versionInfo: {
     version: string
-    changes: string
-    focus: string
+    changes?: string
+    focus?: string
     replacementFilePath?: string
   }) => void
 }
@@ -64,15 +64,15 @@ function EditVersionModal({
   }
 
   const handleSubmit = () => {
-    if (!version || !changes || !focus) {
-      alert('请填写所有必填项')
+    if (!version) {
+      alert('请填写版本号')
       return
     }
 
     onSubmit({
       version,
-      changes,
-      focus,
+      changes: changes || undefined,
+      focus: focus || undefined,
       replacementFilePath: replacementFile || undefined,
     })
   }
@@ -141,7 +141,7 @@ function EditVersionModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-text font-bold text-xs">修改内容</label>
+            <label className="text-text font-bold text-xs">修改内容（选填）</label>
             <textarea
               value={changes}
               onChange={(e) => setChanges(e.target.value)}
@@ -152,7 +152,7 @@ function EditVersionModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-text font-bold text-xs">当前重点</label>
+            <label className="text-text font-bold text-xs">当前重点（选填）</label>
             <input
               type="text"
               value={focus}

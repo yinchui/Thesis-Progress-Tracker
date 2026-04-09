@@ -25,12 +25,12 @@ function VersionCard({ version, onClick, onOpenFile }: VersionCardProps) {
 
       {/* Changes */}
       <p className="text-text text-sm truncate">
-        修改变更：{version.changes}
+        修改变更：{version.changes || '未填写'}
       </p>
 
       {/* Focus */}
       <p className="text-text text-sm truncate">
-        当前重点：{version.focus}
+        当前重点：{version.focus || '未填写'}
       </p>
 
       {/* File */}
