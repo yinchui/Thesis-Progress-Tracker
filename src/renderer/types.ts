@@ -11,8 +11,8 @@ export interface Version {
   thesisId: string
   version: string
   date: string
-  changes: string
-  focus: string
+  changes?: string
+  focus?: string
   filePath: string
   fileName: string
   fileType: string
