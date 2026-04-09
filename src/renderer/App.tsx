@@ -39,6 +39,8 @@ function App() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editBaseVersion, setEditBaseVersion] = useState<Version | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'updated' | 'conflict'>('synced')
+  const [conflictFile, setConflictFile] = useState<string | null>(null)
 
   // Load theses and current thesis on mount
   useEffect(() => {
@@ -88,6 +90,35 @@ function App() {
 
     void checkPending()
   }, [])
+
+  useEffect(() => {
+    const handleThesesUpdated = () => {
+      void loadTheses()
+      setSyncStatus('updated')
+      setTimeout(() => setSyncStatus('synced'), 3000)
+    }
+
+    const handleVersionsUpdated = (_thesisDirName: string) => {
+      if (currentThesisId) {
+        void loadVersions(currentThesisId)
+      }
+      setSyncStatus('updated')
+      setTimeout(() => setSyncStatus('synced'), 3000)
+    }
+
+    const handleConflict = (filePath: string) => {
+      setSyncStatus('conflict')
+      setConflictFile(filePath)
+    }
+
+    window.electronAPI.onSyncThesesUpdated(handleThesesUpdated)
+    window.electronAPI.onSyncVersionsUpdated(handleVersionsUpdated)
+    window.electronAPI.onSyncConflictDetected(handleConflict)
+
+    return () => {
+      window.electronAPI.removeSyncListeners()
+    }
+  }, [currentThesisId])
 
   const loadTheses = async () => {
     try {
@@ -331,6 +362,9 @@ function App() {
         dataDir={dataDirStatus?.effectivePath || ''}
         onSettingsClick={() => setShowSettingsModal(true)}
         uploadDisabled={!!editSession}
+        syncStatus={syncStatus}
+        conflictFile={conflictFile}
+        onDismissConflict={() => { setSyncStatus('synced'); setConflictFile(null) }}
       />
 
       {/* Main Content */}

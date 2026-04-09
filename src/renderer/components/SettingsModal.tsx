@@ -130,6 +130,10 @@ function SettingsModal({ status, onClose, onSelectDir, onResetDir, onOpenDir }: 
           </button>
         </div>
 
+        <div className="text-xs text-muted">
+          将数据目录设置为坚果云同步文件夹即可实现多设备同步
+        </div>
+
         {/* 分隔线 */}
         <div className="border-t border-border" />
 

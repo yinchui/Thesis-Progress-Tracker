@@ -22,6 +22,9 @@ interface SidebarProps {
   dataDir: string
   onSettingsClick: () => void
   uploadDisabled?: boolean
+  syncStatus: 'synced' | 'updated' | 'conflict'
+  conflictFile?: string | null
+  onDismissConflict?: () => void
 }
 
 function Sidebar({
@@ -37,7 +40,10 @@ function Sidebar({
   onUploadClick,
   dataDir,
   onSettingsClick,
-  uploadDisabled
+  uploadDisabled,
+  syncStatus,
+  conflictFile: _conflictFile,
+  onDismissConflict
 }: SidebarProps) {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
@@ -95,6 +101,37 @@ function Sidebar({
       >
         上传新版本
       </button>
+
+      {/* Sync Status */}
+      <div className="px-3 pb-2">
+        {syncStatus === 'synced' && (
+          <div className="flex items-center gap-1.5 text-xs text-muted">
+            <span className="w-2 h-2 rounded-full bg-green-400 inline-block flex-shrink-0" />
+            已同步
+          </div>
+        )}
+        {syncStatus === 'updated' && (
+          <div className="flex items-center gap-1.5 text-xs text-primary font-bold">
+            <span className="w-2 h-2 rounded-full bg-primary inline-block flex-shrink-0" />
+            已更新
+          </div>
+        )}
+        {syncStatus === 'conflict' && (
+          <div className="flex items-center gap-1.5 text-xs text-yellow-600">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block flex-shrink-0" />
+            <span className="flex-1">检测到同步冲突</span>
+            {onDismissConflict && (
+              <button
+                onClick={onDismissConflict}
+                className="text-muted hover:text-text ml-1"
+                title="忽略"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Settings */}
       <div className="px-3 pb-3">
