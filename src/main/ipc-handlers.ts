@@ -436,8 +436,7 @@ ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) =
 
 ipcMain.handle('cancel-edit-session', async () => {
   log.info('IPC: cancel-edit-session');
-  const dataDir = getDataDir();
-  clearSession(dataDir, true);
+  clearSession(getUserDataPath(), true);
   return true;
 });
 
