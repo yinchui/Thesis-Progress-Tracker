@@ -1,4 +1,4 @@
-﻿import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -20,38 +20,25 @@ import {
 } from './edit-session';
 import { EditSessionParams } from './edit-session-types';
 import './updater';
+import {
+  loadThesesIndex,
+  saveThesesIndex,
+  loadThesisVersions,
+  saveThesisVersions,
+  loadLocalState,
+  saveLocalState,
+  getThesisDir,
+  resolveVersionFilePath,
+  toRelativeFilePath,
+  sanitizeFileName,
+  mergeThesesIndex,
+  Thesis,
+  VersionRecord,
+} from './split-data-store';
+import { needsMigration, migrateToSplitFormat } from './data-migration';
 
-// ==================== 绫诲瀷瀹氫箟 ====================
+// ==================== 工具函数 ====================
 
-export interface Thesis {
-  id: string;
-  title: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Version {
-  id: string;
-  thesisId: string;
-  version: string;
-  date: string;
-  changes?: string;
-  focus?: string;
-  filePath?: string;
-  fileName?: string;
-  fileType?: string;
-}
-
-export interface AppData {
-  theses: Thesis[];
-  currentThesisId: string | null;
-  versions: Version[];
-}
-
-// ==================== 宸ュ叿鍑芥暟 ====================
-
-// 鑾峰彇鏁版嵁鐩綍
 function getRuntimeResolutionInput(): RuntimeResolutionInput {
   const userDataPath = app.getPath('userData');
   return {
@@ -69,45 +56,21 @@ function getDataDir(): string {
   return getDataDirStatus().effectivePath;
 }
 
-// 鑾峰彇鏁版嵁鏂囦欢璺緞
-function getDataFilePath(): string {
-  return path.join(getDataDir(), 'data.json');
+function getUserDataPath(): string {
+  return app.getPath('userData');
 }
 
-// 鑾峰彇璁烘枃鏂囦欢瀛樺偍鐩綍
-function getThesisFilesDir(thesisTitle: string, thesisId?: string): string {
-  const sanitized = sanitizeFileName(thesisTitle);
-  const dir = path.join(getDataDir(), 'files', sanitized);
-
-  // 如果新格式目录不存在，检查旧 UUID 格式并自动迁移
-  if (!fs.existsSync(dir) && thesisId) {
-    const oldDir = path.join(getDataDir(), 'files', `thesis_${thesisId}`);
-    if (fs.existsSync(oldDir)) {
-      try {
-        fs.renameSync(oldDir, dir);
-        log.info(`Migrated thesis dir: thesis_${thesisId} -> ${sanitized}`);
-        return dir;
-      } catch (e) {
-        log.error('Error migrating thesis dir:', e);
-        return oldDir;
-      }
-    }
-  }
-
+function getThesisFilesDirNew(thesisTitle: string): string {
+  const dir = getThesisDir(getDataDir(), thesisTitle);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return dir;
 }
 
-// 鐢熸垚 UUID
+// 生成 UUID
 function generateId(): string {
   return crypto.randomUUID();
-}
-
-// 文件名安全化处理
-function sanitizeFileName(name: string): string {
-  return name.replace(/[/\\:*?"<>|]/g, '_').trim() || 'untitled';
 }
 
 // 生成不重复的文件路径
@@ -125,368 +88,224 @@ function uniqueFilePath(dir: string, fileName: string): string {
   return filePath;
 }
 
-// 鍔犺浇鏁版嵁
-function loadData(): AppData {
-  const filePath = getDataFilePath();
-  try {
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    log.error('Error loading data:', error);
-  }
-  return {
-    theses: [],
-    currentThesisId: null,
-    versions: []
-  };
-}
-
-// 淇濆瓨鏁版嵁
-function saveData(data: AppData): boolean {
-  const filePath = getDataFilePath();
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    return true;
-  } catch (error) {
-    log.error('Error saving data:', error);
-    return false;
-  }
-}
-
-// 鍒涘缓榛樿璁烘枃锛堝悜鍚庡吋瀹癸級
-function ensureDefaultThesis(): AppData {
-  let data = loadData();
-
-  // 濡傛灉娌℃湁璁烘枃锛屽垱寤轰竴涓粯璁よ鏂?
-  if (data.theses.length === 0) {
-    const defaultThesis: Thesis = {
-      id: generateId(),
-      title: '榛樿璁烘枃',
-      description: 'Auto-created default thesis',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    // 灏濊瘯杩佺Щ鏃х増鏈暟鎹?
-    const oldVersionsFile = path.join(getDataDir(), 'versions.json');
-    if (fs.existsSync(oldVersionsFile)) {
-      try {
-        const oldVersions = JSON.parse(fs.readFileSync(oldVersionsFile, 'utf-8'));
-        if (Array.isArray(oldVersions) && oldVersions.length > 0) {
-          // 涓烘棫鐗堟湰娣诲姞 thesisId
-          data.versions = oldVersions.map((v: any) => ({
-            ...v,
-            thesisId: defaultThesis.id
-          }));
-          log.info(`Migrated ${oldVersions.length} old versions to default thesis`);
-
-          // 绉诲姩鏃ф枃浠跺埌鏂扮洰褰?
-          const thesisFilesDir = getThesisFilesDir(defaultThesis.title, defaultThesis.id);
-          for (const v of data.versions) {
-            if (v.filePath && fs.existsSync(v.filePath)) {
-              const ext = path.extname(v.filePath);
-              const baseName = v.fileName ? path.basename(v.fileName, ext) : v.id;
-              const newFileName = `${sanitizeFileName(v.version)}_${sanitizeFileName(baseName)}${ext}`;
-              const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
-              try {
-                fs.copyFileSync(v.filePath, newFilePath);
-                v.filePath = newFilePath;
-              } catch (e) {
-                log.error('Error migrating file:', e);
-              }
-            }
-          }
-        }
-        // 鍒犻櫎鏃х増鏈枃浠?
-        fs.unlinkSync(oldVersionsFile);
-      } catch (e) {
-        log.error('Error migrating old versions:', e);
-      }
-    }
-
-    data.theses.push(defaultThesis);
-    data.currentThesisId = defaultThesis.id;
-    saveData(data);
-    log.info('Created default thesis for backward compatibility');
-  }
-
-  // 纭繚褰撳墠璁烘枃鏈夋晥
-  if (!data.currentThesisId || !data.theses.find(t => t.id === data.currentThesisId)) {
-    data.currentThesisId = data.theses[0]?.id || null;
-    saveData(data);
-  }
-
-  return data;
-}
-
 // ==================== Thesis IPC Handlers ====================
 
-// 鑾峰彇鎵€鏈夎鏂囧垪琛?
 ipcMain.handle('get-theses', async () => {
   log.info('IPC: get-theses');
-  const data = ensureDefaultThesis();
-  return data.theses;
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  if (index.theses.length === 0) {
+    const defaultThesis: Thesis = {
+      id: generateId(),
+      title: '默认论文',
+      description: 'Auto-created default thesis',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    index.theses.push(defaultThesis);
+    saveThesesIndex(dataDir, index);
+    saveLocalState(getUserDataPath(), { currentThesisId: defaultThesis.id });
+  }
+  return index.theses;
 });
 
-// 鍒涘缓鏂拌鏂?
 ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; description?: string }) => {
   log.info('IPC: create-thesis', thesisData);
-  const data = loadData();
-
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
   const newThesis: Thesis = {
     id: generateId(),
     title: thesisData.title,
     description: thesisData.description,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
-
-  // 鍒涘缓璁烘枃鏂囦欢鐩綍
-  getThesisFilesDir(newThesis.title, newThesis.id);
-
-  data.theses.push(newThesis);
-  data.currentThesisId = newThesis.id;
-
-  if (saveData(data)) {
-    return newThesis;
-  }
-  return null;
+  getThesisFilesDirNew(newThesis.title);
+  saveThesisVersions(dataDir, newThesis.title, { versions: [] });
+  index.theses.push(newThesis);
+  saveThesesIndex(dataDir, index);
+  saveLocalState(getUserDataPath(), { currentThesisId: newThesis.id });
+  return newThesis;
 });
 
-// 鏇存柊璁烘枃淇℃伅
 ipcMain.handle('update-thesis', async (_event, id: string, updates: { title?: string; description?: string }) => {
   log.info('IPC: update-thesis', id, updates);
-  const data = loadData();
-  const index = data.theses.findIndex(t => t.id === id);
-
-  if (index !== -1) {
-    const oldTitle = data.theses[index].title;
-
-    data.theses[index] = {
-      ...data.theses[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-
-    // 标题变更时重命名文件夹并更新版本路径
-    if (updates.title && updates.title !== oldTitle) {
-      const oldDir = path.join(getDataDir(), 'files', sanitizeFileName(oldTitle));
-      const newDir = path.join(getDataDir(), 'files', sanitizeFileName(updates.title));
-      if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
-        try {
-          fs.renameSync(oldDir, newDir);
-          // 更新该论文所有版本的 filePath
-          for (const v of data.versions) {
-            if (v.thesisId === id && v.filePath && v.filePath.startsWith(oldDir)) {
-              v.filePath = v.filePath.replace(oldDir, newDir);
-            }
-          }
-          log.info(`Renamed thesis dir: ${oldTitle} -> ${updates.title}`);
-        } catch (e) {
-          log.error('Error renaming thesis dir:', e);
-        }
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  const thesisIdx = index.theses.findIndex(t => t.id === id);
+  if (thesisIdx === -1) return null;
+  const oldTitle = index.theses[thesisIdx].title;
+  index.theses[thesisIdx] = { ...index.theses[thesisIdx], ...updates, updatedAt: new Date().toISOString() };
+  if (updates.title && updates.title !== oldTitle) {
+    const oldDir = getThesisDir(dataDir, oldTitle);
+    const newDir = getThesisDir(dataDir, updates.title);
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+      try {
+        fs.renameSync(oldDir, newDir);
+        log.info(`Renamed thesis dir: ${oldTitle} -> ${updates.title}`);
+      } catch (e) {
+        log.error('Error renaming thesis dir:', e);
       }
     }
-
-    if (saveData(data)) {
-      return data.theses[index];
-    }
   }
-  return null;
+  saveThesesIndex(dataDir, index);
+  return index.theses[thesisIdx];
 });
 
-// 鍒犻櫎璁烘枃锛堝悓鏃跺垹闄ゆ墍鏈夌増鏈拰鏂囦欢锛?
 ipcMain.handle('delete-thesis', async (_event, id: string) => {
   log.info('IPC: delete-thesis', id);
-  const data = loadData();
-
-  // 妫€鏌ユ槸鍚︽槸鏈€鍚庝竴涓鏂?
-  if (data.theses.length <= 1) {
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  if (index.theses.length <= 1) {
     log.warn('Cannot delete the last thesis');
     return false;
   }
-
-  // 鍒犻櫎璁烘枃鐨勬墍鏈夌増鏈枃浠?
-  const thesisVersions = data.versions.filter(v => v.thesisId === id);
-  for (const v of thesisVersions) {
-    if (v.filePath && fs.existsSync(v.filePath)) {
-      try {
-        fs.unlinkSync(v.filePath);
-      } catch (e) {
-        log.error('Error deleting version file:', e);
-      }
+  const thesis = index.theses.find(t => t.id === id);
+  if (thesis) {
+    const thesisDir = getThesisDir(dataDir, thesis.title);
+    if (fs.existsSync(thesisDir)) {
+      try { fs.rmSync(thesisDir, { recursive: true, force: true }); } catch (e) { log.error('Error deleting thesis directory:', e); }
     }
   }
-
-  // 鍒犻櫎璁烘枃鏂囦欢鐩綍
-  const thesis = data.theses.find(t => t.id === id);
-  const thesisFilesDir = thesis
-    ? path.join(getDataDir(), 'files', sanitizeFileName(thesis.title))
-    : path.join(getDataDir(), 'files', `thesis_${id}`);
-  if (fs.existsSync(thesisFilesDir)) {
-    try {
-      fs.rmSync(thesisFilesDir, { recursive: true, force: true });
-    } catch (e) {
-      log.error('Error deleting thesis files directory:', e);
-    }
+  index.theses = index.theses.filter(t => t.id !== id);
+  saveThesesIndex(dataDir, index);
+  const localState = loadLocalState(getUserDataPath());
+  if (localState.currentThesisId === id) {
+    saveLocalState(getUserDataPath(), { currentThesisId: index.theses[0]?.id || null });
   }
-
-  // 鍒犻櫎璁烘枃鍙婂叾鐗堟湰
-  data.theses = data.theses.filter(t => t.id !== id);
-  data.versions = data.versions.filter(v => v.thesisId !== id);
-
-  // 鏇存柊褰撳墠璁烘枃
-  if (data.currentThesisId === id) {
-    data.currentThesisId = data.theses[0]?.id || null;
-  }
-
-  return saveData(data);
+  return true;
 });
 
-// 璁剧疆褰撳墠婵€娲荤殑璁烘枃
 ipcMain.handle('set-current-thesis', async (_event, id: string) => {
   log.info('IPC: set-current-thesis', id);
-  const data = loadData();
-
-  const thesis = data.theses.find(t => t.id === id);
-  if (thesis) {
-    data.currentThesisId = id;
-    return saveData(data);
-  }
-  return false;
+  saveLocalState(getUserDataPath(), { currentThesisId: id });
+  return true;
 });
 
-// 鑾峰彇褰撳墠璁烘枃ID
 ipcMain.handle('get-current-thesis', async () => {
   log.info('IPC: get-current-thesis');
-  const data = ensureDefaultThesis();
-  return data.currentThesisId;
+  return loadLocalState(getUserDataPath()).currentThesisId;
 });
 
-// ==================== Version IPC Handlers (淇敼) ====================
+// ==================== Version IPC Handlers ====================
 
-// 鑾峰彇鐗堟湰鍒楄〃锛堝彲閫夊弬鏁帮細thesisId锛?
 ipcMain.handle('get-versions', async (_event, thesisId?: string) => {
   log.info('IPC: get-versions', thesisId);
-  const data = ensureDefaultThesis();
-
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
   if (thesisId) {
-    return data.versions.filter(v => v.thesisId === thesisId);
+    const thesis = index.theses.find(t => t.id === thesisId);
+    if (!thesis) return [];
+    const data = loadThesisVersions(dataDir, thesis.title);
+    return data.versions.map(v => ({
+      ...v,
+      filePath: v.filePath ? resolveVersionFilePath(dataDir, thesis.title, v.filePath) : undefined,
+    }));
   }
-  return data.versions;
+  const allVersions: VersionRecord[] = [];
+  for (const thesis of index.theses) {
+    const data = loadThesisVersions(dataDir, thesis.title);
+    allVersions.push(...data.versions.map(v => ({
+      ...v,
+      filePath: v.filePath ? resolveVersionFilePath(dataDir, thesis.title, v.filePath) : undefined,
+    })));
+  }
+  return allVersions;
 });
 
-// 娣诲姞鐗堟湰锛堥渶瑕?thesisId锛?
 ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string) => {
   log.info('IPC: add-version', versionData, thesisId);
-  const data = ensureDefaultThesis();
-
-  // 纭畾鐩爣璁烘枃ID
-  const targetThesisId = thesisId || data.currentThesisId;
-  if (!targetThesisId) {
-    log.error('No target thesis for add-version');
-    return false;
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  const localState = loadLocalState(getUserDataPath());
+  const targetThesisId = thesisId || localState.currentThesisId;
+  if (!targetThesisId) { log.error('No target thesis for add-version'); return false; }
+  const thesis = index.theses.find(t => t.id === targetThesisId);
+  if (!thesis) return false;
+  const thesisDir = getThesisFilesDirNew(thesis.title);
+  let relativeFilePath: string | undefined;
+  if (versionData.filePath && fs.existsSync(versionData.filePath)) {
+    const ext = path.extname(versionData.filePath);
+    const baseName = versionData.fileName ? path.basename(versionData.fileName, ext) : generateId();
+    const newFileName = `${sanitizeFileName(versionData.version)}_${sanitizeFileName(baseName)}${ext}`;
+    const newFilePath = uniqueFilePath(thesisDir, newFileName);
+    try {
+      fs.copyFileSync(versionData.filePath, newFilePath);
+      relativeFilePath = path.basename(newFilePath);
+    } catch (e) { log.error('Error copying file:', e); }
   }
-
-  const newVersion: Version = {
+  const newVersion: VersionRecord = {
     id: generateId(),
     thesisId: targetThesisId,
     version: versionData.version,
     date: versionData.date,
     changes: versionData.changes,
     focus: versionData.focus,
-    filePath: versionData.filePath,
+    filePath: relativeFilePath,
     fileName: versionData.fileName,
-    fileType: versionData.fileType
+    fileType: versionData.fileType,
   };
-
-  // 濡傛灉鏈夋枃浠讹紝澶嶅埗鍒拌鏂囩洰褰?
-  if (versionData.filePath && fs.existsSync(versionData.filePath)) {
-    const targetThesis = data.theses.find(t => t.id === targetThesisId);
-    const thesisFilesDir = getThesisFilesDir(targetThesis?.title || targetThesisId, targetThesisId);
-    const ext = path.extname(versionData.filePath);
-    const baseName = versionData.fileName ? path.basename(versionData.fileName, ext) : newVersion.id;
-    const newFileName = `${sanitizeFileName(versionData.version)}_${sanitizeFileName(baseName)}${ext}`;
-    const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
-
-    try {
-      fs.copyFileSync(versionData.filePath, newFilePath);
-      newVersion.filePath = newFilePath;
-    } catch (e) {
-      log.error('Error copying file:', e);
-    }
+  const versionsData = loadThesisVersions(dataDir, thesis.title);
+  versionsData.versions.unshift(newVersion);
+  saveThesisVersions(dataDir, thesis.title, versionsData);
+  const thesisIdx = index.theses.findIndex(t => t.id === targetThesisId);
+  if (thesisIdx !== -1) {
+    index.theses[thesisIdx].updatedAt = new Date().toISOString();
+    saveThesesIndex(dataDir, index);
   }
-
-  data.versions.unshift(newVersion);
-
-  // 鏇存柊璁烘枃鐨勬洿鏂版椂闂?
-  const thesisIndex = data.theses.findIndex(t => t.id === targetThesisId);
-  if (thesisIndex !== -1) {
-    data.theses[thesisIndex].updatedAt = new Date().toISOString();
-  }
-
-  return saveData(data);
+  return true;
 });
 
-// 鏇存柊鐗堟湰
 ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
   log.info('IPC: update-version', id, updates);
-  const data = loadData();
-  const index = data.versions.findIndex(v => v.id === id);
-
-  if (index !== -1) {
-    data.versions[index] = { ...data.versions[index], ...updates };
-
-    // 濡傛灉鏇存柊浜嗘枃浠讹紝闇€瑕佺Щ鍔ㄥ埌姝ｇ‘鐨勮鏂囩洰褰?
-    if (updates.filePath && updates.filePath !== data.versions[index].filePath) {
-      const thesisId = data.versions[index].thesisId;
-      const thesis = data.theses.find(t => t.id === thesisId);
-      const thesisFilesDir = getThesisFilesDir(thesis?.title || thesisId, thesisId);
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  for (const thesis of index.theses) {
+    const data = loadThesisVersions(dataDir, thesis.title);
+    const vIdx = data.versions.findIndex(v => v.id === id);
+    if (vIdx === -1) continue;
+    if (updates.filePath && fs.existsSync(updates.filePath)) {
+      const thesisDir = getThesisFilesDirNew(thesis.title);
       const ext = path.extname(updates.filePath);
-      const ver = data.versions[index].version || id;
-      const baseName = data.versions[index].fileName ? path.basename(data.versions[index].fileName, ext) : id;
+      const ver = data.versions[vIdx].version || id;
+      const baseName = data.versions[vIdx].fileName ? path.basename(data.versions[vIdx].fileName!, ext) : id;
       const newFileName = `${sanitizeFileName(ver)}_${sanitizeFileName(baseName)}${ext}`;
-      const newFilePath = uniqueFilePath(thesisFilesDir, newFileName);
-
+      const newFilePath = uniqueFilePath(thesisDir, newFileName);
       try {
-        if (fs.existsSync(updates.filePath)) {
-          fs.copyFileSync(updates.filePath, newFilePath);
-          data.versions[index].filePath = newFilePath;
-        }
-      } catch (e) {
-        log.error('Error copying updated file:', e);
-      }
+        fs.copyFileSync(updates.filePath, newFilePath);
+        updates.filePath = path.basename(newFilePath);
+      } catch (e) { log.error('Error copying updated file:', e); }
     }
-
-    return saveData(data);
+    data.versions[vIdx] = { ...data.versions[vIdx], ...updates };
+    saveThesisVersions(dataDir, thesis.title, data);
+    return true;
   }
   return false;
 });
 
-// 鍒犻櫎鐗堟湰
 ipcMain.handle('delete-version', async (_event, id: string) => {
   log.info('IPC: delete-version', id);
-  const data = loadData();
-
-  // 鍒犻櫎鐗堟湰鏂囦欢
-  const version = data.versions.find(v => v.id === id);
-  if (version?.filePath && fs.existsSync(version.filePath)) {
-    try {
-      fs.unlinkSync(version.filePath);
-    } catch (e) {
-      log.error('Error deleting version file:', e);
+  const dataDir = getDataDir();
+  const index = loadThesesIndex(dataDir);
+  for (const thesis of index.theses) {
+    const data = loadThesisVersions(dataDir, thesis.title);
+    const version = data.versions.find(v => v.id === id);
+    if (!version) continue;
+    if (version.filePath) {
+      const absPath = resolveVersionFilePath(dataDir, thesis.title, version.filePath);
+      if (fs.existsSync(absPath)) {
+        try { fs.unlinkSync(absPath); } catch (e) { log.error('Error deleting file:', e); }
+      }
     }
+    data.versions = data.versions.filter(v => v.id !== id);
+    saveThesisVersions(dataDir, thesis.title, data);
+    return true;
   }
-
-  data.versions = data.versions.filter(v => v.id !== id);
-  return saveData(data);
+  return false;
 });
 
-// ==================== 鏂囦欢鎿嶄綔 IPC Handlers ====================
+// ==================== 文件操作 IPC Handlers ====================
 
-// 閫夋嫨鏂囦欢
 ipcMain.handle('select-file', async () => {
   log.info('IPC: select-file');
   const windows = BrowserWindow.getAllWindows();
@@ -505,19 +324,21 @@ ipcMain.handle('select-file', async () => {
   return null;
 });
 
-// 澶嶅埗鏂囦欢锛堝凡搴熷純锛屼娇鐢ㄥ唴閮ㄥ鐞嗭級
 ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string, thesisId: string) => {
   log.info('IPC: copy-file', sourcePath, versionId, thesisId);
   try {
-    const data = loadData();
-    const thesis = data.theses.find(t => t.id === thesisId);
-    const version = data.versions.find(v => v.id === versionId);
+    const dataDir = getDataDir();
+    const index = loadThesesIndex(dataDir);
+    const thesis = index.theses.find(t => t.id === thesisId);
+    const thesisTitle = thesis?.title || thesisId;
+    const thesisDir = getThesisFilesDirNew(thesisTitle);
+    const versionsData = loadThesisVersions(dataDir, thesisTitle);
+    const version = versionsData.versions.find(v => v.id === versionId);
     const ext = path.extname(sourcePath);
-    const thesisFilesDir = getThesisFilesDir(thesis?.title || thesisId, thesisId);
     const baseName = path.basename(sourcePath, ext);
     const ver = version?.version || versionId;
     const destFileName = `${sanitizeFileName(ver)}_${sanitizeFileName(baseName)}${ext}`;
-    const destPath = uniqueFilePath(thesisFilesDir, destFileName);
+    const destPath = uniqueFilePath(thesisDir, destFileName);
 
     fs.copyFileSync(sourcePath, destPath);
     return destPath;
@@ -527,7 +348,6 @@ ipcMain.handle('copy-file', async (_event, sourcePath: string, versionId: string
   }
 });
 
-// 鎵撳紑鏂囦欢
 ipcMain.handle('open-file', async (_event, filePath: string) => {
   log.info('IPC: open-file', filePath);
   try {
@@ -539,12 +359,10 @@ ipcMain.handle('open-file', async (_event, filePath: string) => {
   }
 });
 
-// 鑾峰彇鏁版嵁鐩綍
 ipcMain.handle('get-data-dir', async () => {
   return getDataDirStatus();
 });
 
-// 閫夋嫨鏁版嵁鐩綍锛堝凡搴熷純锛屼娇鐢ㄥ浐瀹氳矾寰勶級
 ipcMain.handle('select-data-dir', async () => {
   log.info('IPC: select-data-dir');
   const windows = BrowserWindow.getAllWindows();
@@ -580,8 +398,8 @@ ipcMain.handle('open-data-dir', async () => {
 ipcMain.handle('start-edit-session', async (_event, params: EditSessionParams) => {
   log.info('IPC: start-edit-session', params.baseVersionId);
   const dataDir = getDataDir();
-  const data = loadData();
-  const thesis = data.theses.find(t => t.id === params.thesisId);
+  const index = loadThesesIndex(dataDir);
+  const thesis = index.theses.find(t => t.id === params.thesisId);
 
   const session = createEditSession(params, dataDir, thesis?.title);
 
@@ -649,14 +467,40 @@ ipcMain.handle('resolve-pending-edit-session', async (_event, keep: boolean) => 
   return true;
 });
 
-// 鍒濆鍖栨暟鎹紙搴旂敤鍚姩鏃惰皟鐢級
+// ==================== 初始化 ====================
+
 export function initializeApp(): void {
   log.info('Initializing app data...');
-  ensureDefaultThesis();
   const dataDir = getDataDir();
+  const userDataPath = getUserDataPath();
+
+  if (needsMigration(dataDir)) {
+    log.info('Migrating data to split format...');
+    migrateToSplitFormat(dataDir, userDataPath);
+  }
+
+  const index = loadThesesIndex(dataDir);
+  if (index.theses.length === 0) {
+    const defaultThesis: Thesis = {
+      id: generateId(),
+      title: '默认论文',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    index.theses.push(defaultThesis);
+    saveThesesIndex(dataDir, index);
+    saveLocalState(userDataPath, { currentThesisId: defaultThesis.id });
+  }
+
+  const localState = loadLocalState(userDataPath);
+  if (!localState.currentThesisId || !index.theses.find(t => t.id === localState.currentThesisId)) {
+    saveLocalState(userDataPath, { currentThesisId: index.theses[0]?.id || null });
+  }
+
   const persisted = loadPersistedSession(dataDir);
   if (persisted) {
     log.info('Found unfinished edit session:', persisted.newVersionId);
   }
+
   log.info('App data initialized');
 }
