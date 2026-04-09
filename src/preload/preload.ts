@@ -93,6 +93,22 @@ const electronAPI = {
   removeUpdateProgressListener: () => {
     ipcRenderer.removeAllListeners('update-download-progress');
   },
+
+  // Sync events
+  onSyncThesesUpdated: (callback: () => void) => {
+    ipcRenderer.on('sync-theses-updated', () => callback())
+  },
+  onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => {
+    ipcRenderer.on('sync-versions-updated', (_e: any, dirName: string) => callback(dirName))
+  },
+  onSyncConflictDetected: (callback: (filePath: string) => void) => {
+    ipcRenderer.on('sync-conflict-detected', (_e: any, fp: string) => callback(fp))
+  },
+  removeSyncListeners: () => {
+    ipcRenderer.removeAllListeners('sync-theses-updated')
+    ipcRenderer.removeAllListeners('sync-versions-updated')
+    ipcRenderer.removeAllListeners('sync-conflict-detected')
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

@@ -91,6 +91,12 @@ export interface ElectronAPI {
   downloadUpdate: (url: string) => Promise<{ success: boolean; filePath?: string; error?: string }>
   onUpdateProgress: (callback: (percent: number) => void) => void
   removeUpdateProgressListener: () => void
+
+  // Sync events
+  onSyncThesesUpdated: (callback: () => void) => void
+  onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => void
+  onSyncConflictDetected: (callback: (filePath: string) => void) => void
+  removeSyncListeners: () => void
 }
 
 export interface UpdateInfo {

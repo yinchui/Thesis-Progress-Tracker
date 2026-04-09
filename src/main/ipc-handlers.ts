@@ -35,9 +35,12 @@ import {
   Thesis,
   VersionRecord,
 } from './split-data-store';
-import { needsMigration, migrateToSplitFormat } from './data-migration';
+import { needsMigration, migrateToSplitFormat } from './data-migration'
+import { createFileWatcher, FileWatcher } from './file-watcher';
 
 // ==================== 工具函数 ====================
+
+let fileWatcher: FileWatcher | null = null
 
 function getRuntimeResolutionInput(): RuntimeResolutionInput {
   const userDataPath = app.getPath('userData');
@@ -58,6 +61,10 @@ function getDataDir(): string {
 
 function getUserDataPath(): string {
   return app.getPath('userData');
+}
+
+function silenceWatcher(): void {
+  fileWatcher?.setSilent(2000)
 }
 
 function getThesisFilesDirNew(thesisTitle: string): string {
@@ -125,6 +132,7 @@ ipcMain.handle('create-thesis', async (_event, thesisData: { title: string; desc
   index.theses.push(newThesis);
   saveThesesIndex(dataDir, index);
   saveLocalState(getUserDataPath(), { currentThesisId: newThesis.id });
+  silenceWatcher();
   return newThesis;
 });
 
@@ -149,6 +157,7 @@ ipcMain.handle('update-thesis', async (_event, id: string, updates: { title?: st
     }
   }
   saveThesesIndex(dataDir, index);
+  silenceWatcher();
   return index.theses[thesisIdx];
 });
 
@@ -173,6 +182,7 @@ ipcMain.handle('delete-thesis', async (_event, id: string) => {
   if (localState.currentThesisId === id) {
     saveLocalState(getUserDataPath(), { currentThesisId: index.theses[0]?.id || null });
   }
+  silenceWatcher();
   return true;
 });
 
@@ -253,6 +263,7 @@ ipcMain.handle('add-version', async (_event, versionData: any, thesisId?: string
     index.theses[thesisIdx].updatedAt = new Date().toISOString();
     saveThesesIndex(dataDir, index);
   }
+  silenceWatcher();
   return true;
 });
 
@@ -278,6 +289,7 @@ ipcMain.handle('update-version', async (_event, id: string, updates: any) => {
     }
     data.versions[vIdx] = { ...data.versions[vIdx], ...updates };
     saveThesisVersions(dataDir, thesis.title, data);
+    silenceWatcher();
     return true;
   }
   return false;
@@ -299,6 +311,7 @@ ipcMain.handle('delete-version', async (_event, id: string) => {
     }
     data.versions = data.versions.filter(v => v.id !== id);
     saveThesisVersions(dataDir, thesis.title, data);
+    silenceWatcher();
     return true;
   }
   return false;
@@ -373,12 +386,16 @@ ipcMain.handle('select-data-dir', async () => {
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
-  return setCustomDataDir(getRuntimeResolutionInput(), result.filePaths[0]);
+  const status = setCustomDataDir(getRuntimeResolutionInput(), result.filePaths[0]);
+  silenceWatcher();
+  return status;
 });
 
 ipcMain.handle('reset-data-dir', async () => {
   log.info('IPC: reset-data-dir');
-  return resetCustomDataDir(getRuntimeResolutionInput());
+  const status = resetCustomDataDir(getRuntimeResolutionInput());
+  silenceWatcher();
+  return status;
 });
 
 ipcMain.handle('open-data-dir', async () => {
@@ -499,6 +516,33 @@ export function initializeApp(): void {
   if (persisted) {
     log.info('Found unfinished edit session:', persisted.newVersionId);
   }
+
+  // Start file watcher for multi-device sync
+  if (fileWatcher) {
+    fileWatcher.stop()
+  }
+  fileWatcher = createFileWatcher(dataDir, {
+    onThesesIndexChanged: () => {
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        windows[0].webContents.send('sync-theses-updated')
+      }
+    },
+    onVersionsChanged: (thesisDirName: string) => {
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        windows[0].webContents.send('sync-versions-updated', thesisDirName)
+      }
+    },
+    onConflictDetected: (filePath: string) => {
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        windows[0].webContents.send('sync-conflict-detected', filePath)
+      }
+    },
+  })
+  fileWatcher.start()
+  log.info('File watcher started for multi-device sync')
 
   log.info('App data initialized');
 }
