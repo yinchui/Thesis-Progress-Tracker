@@ -4,7 +4,7 @@ export type {
   ThesisData,
   WebDAVConfig,
   AppConfig,
-} from '@thesis-tracker/shared'
+} from '@thesis-tracker/shared';
 
 // 导出 shared 包的工具函数
 export {
@@ -17,4 +17,4 @@ export {
   isValidWebDAVUrl,
   isValidEmail,
   isValidDataPath,
-} from '@thesis-tracker/shared'
+} from '@thesis-tracker/shared';
