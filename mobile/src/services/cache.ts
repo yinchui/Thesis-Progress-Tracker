@@ -26,17 +26,17 @@ export class CacheService {
     }
   }
 
-  async getCachedDataVersion(): Promise<number | null> {
+  async getCachedLastModified(): Promise<string | null> {
     const data = await this.getCachedVersions();
-    return data?.dataVersion ?? null;
+    return data?.lastModified ?? null;
   }
 
-  async needsUpdate(remoteDataVersion: number): Promise<boolean> {
-    const cachedVersion = await this.getCachedDataVersion();
-    if (cachedVersion === null) {
+  async needsUpdate(remoteLastModified: string): Promise<boolean> {
+    const cachedLastModified = await this.getCachedLastModified();
+    if (cachedLastModified === null) {
       return true;
     }
-    return remoteDataVersion > cachedVersion;
+    return remoteLastModified !== cachedLastModified;
   }
 
   async clearCache(): Promise<void> {
