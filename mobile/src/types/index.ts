@@ -1,15 +1,12 @@
-// Shared utilities and types for Thesis Tracker
-// This package is shared between the Electron app and React Native mobile app
-
-// Export types
+// 导出 shared 包的类型
 export type {
   Version,
   ThesisData,
   WebDAVConfig,
   AppConfig,
-} from './types';
+} from '@thesis-tracker/shared'
 
-// Export utilities
+// 导出 shared 包的工具函数
 export {
   formatDate,
   formatDateTime,
@@ -20,4 +17,4 @@ export {
   isValidWebDAVUrl,
   isValidEmail,
   isValidDataPath,
-} from './utils';
+} from '@thesis-tracker/shared'
