@@ -4,6 +4,10 @@
   "description": "论文进度管理器 - Thesis Progress Tracker",
   "main": "dist/main/index.js",
   "type": "commonjs",
+  "workspaces": [
+    "shared",
+    "mobile"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:renderer": "vite",
