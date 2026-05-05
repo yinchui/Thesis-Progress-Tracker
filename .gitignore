@@ -1,0 +1,31 @@
+node_modules/
+dist/
+release/
+.worktrees/
+*.log
+.DS_Store
+Thumbs.db
+data/
+!tests/release/
+!tests/release/**
+!docs/release/
+!docs/release/**
+._*
+
+# mobile (Expo)
+mobile/.expo/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.metro-health-check*
+mobile/ios/
+mobile/android/
+mobile/.kotlin/
+
+# mobile
+mobile/.expo/
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+mobile/ios/
+mobile/android/
+mobile/*.tsbuildinfo
