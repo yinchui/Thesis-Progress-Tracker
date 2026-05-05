@@ -116,8 +116,5 @@ Then publish the generated `.exe` from `release/` to GitHub Releases.
 
 Detailed guide: `docs/release/windows-github-release.md`.
 
-## Data Directory
 
-- Ĭ������ʹ�ó���Ŀ¼�µ� `data` �ļ��У�����Ŀ¼����
-- �������Ŀ¼����д�����Զ����˵� `userData/data`���Զ����ˣ���
 - ���ڲ���� `����` ���޸Ĵ洢·����
