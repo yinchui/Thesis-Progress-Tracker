@@ -4,6 +4,7 @@
   "directories": {
     "output": "release"
   },
+  "afterPack": "scripts/after-pack-sign-mac.cjs",
   "files": [
     "dist/**/*"
   ],
