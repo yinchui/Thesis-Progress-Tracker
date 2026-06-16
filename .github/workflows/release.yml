@@ -23,13 +23,33 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build and package Mac (arm64)
-        run: npm run build && npx electron-builder --mac dmg --arm64 --publish never
+      - name: Build Mac app (arm64)
+        run: npm run build && npx electron-builder --mac dir --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Build and package Mac (x64)
-        run: npx electron-builder --mac dmg --x64 --publish never
+      - name: Ad-hoc sign Mac app (arm64)
+        run: |
+          codesign --force --deep --sign - "release/mac-arm64/Thesis Progress Tracker.app"
+          codesign --verify --deep --strict --verbose=2 "release/mac-arm64/Thesis Progress Tracker.app"
+
+      - name: Package Mac DMG (arm64)
+        run: npx electron-builder --mac dmg --arm64 --prepackaged "release/mac-arm64/Thesis Progress Tracker.app" --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Build Mac app (x64)
+        run: npx electron-builder --mac dir --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Ad-hoc sign Mac app (x64)
+        run: |
+          codesign --force --deep --sign - "release/mac/Thesis Progress Tracker.app"
+          codesign --verify --deep --strict --verbose=2 "release/mac/Thesis Progress Tracker.app"
+
+      - name: Package Mac DMG (x64)
+        run: npx electron-builder --mac dmg --x64 --prepackaged "release/mac/Thesis Progress Tracker.app" --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -98,3 +118,5 @@ jobs:
             - **Windows**: 下载 `.exe` 文件，双击安装（首次运行会提示未签名，点击「仍要运行」）
             - **Mac (Apple Silicon)**: 下载 `arm64.dmg`，拖入 Applications
             - **Mac (Intel)**: 下载 `x64.dmg`，拖入 Applications
+            - **Mac 若提示“已损坏，无法打开”**: 当前安装包未经过 Apple Developer ID 公证。将 App 拖入 Applications 后，在终端运行：
+              `xattr -dr com.apple.quarantine "/Applications/Thesis Progress Tracker.app"`
