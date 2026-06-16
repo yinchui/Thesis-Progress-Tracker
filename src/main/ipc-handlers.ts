@@ -625,6 +625,12 @@ export function initializeApp(): void {
         windows[0].webContents.send('sync-versions-updated', thesisDirName)
       }
     },
+    onReferencesChanged: (thesisDirName: string) => {
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        windows[0].webContents.send('sync-references-updated', thesisDirName)
+      }
+    },
     onConflictDetected: (filePath: string) => {
       const windows = BrowserWindow.getAllWindows()
       if (windows.length > 0) {

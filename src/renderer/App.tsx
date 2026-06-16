@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Sidebar from './components/Sidebar'
 import Timeline from './components/Timeline'
 import UploadModal from './components/UploadModal'
@@ -42,6 +42,11 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<'synced' | 'updated' | 'conflict'>('synced')
   const [conflictFile, setConflictFile] = useState<string | null>(null)
+  const currentThesisIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    currentThesisIdRef.current = currentThesisId
+  }, [currentThesisId])
 
   // Load theses and current thesis on mount
   useEffect(() => {
@@ -52,6 +57,8 @@ function App() {
   // Load thesis-specific data when current thesis changes
   useEffect(() => {
     if (currentThesisId) {
+      setVersions([])
+      setReferences([])
       void loadVersions(currentThesisId)
       void loadReferences(currentThesisId)
     } else {
@@ -111,6 +118,14 @@ function App() {
       setTimeout(() => setSyncStatus('synced'), 3000)
     }
 
+    const handleReferencesUpdated = (_thesisDirName: string) => {
+      if (currentThesisId) {
+        void loadReferences(currentThesisId)
+      }
+      setSyncStatus('updated')
+      setTimeout(() => setSyncStatus('synced'), 3000)
+    }
+
     const handleConflict = (filePath: string) => {
       setSyncStatus('conflict')
       setConflictFile(filePath)
@@ -118,6 +133,7 @@ function App() {
 
     window.electronAPI.onSyncThesesUpdated(handleThesesUpdated)
     window.electronAPI.onSyncVersionsUpdated(handleVersionsUpdated)
+    window.electronAPI.onSyncReferencesUpdated(handleReferencesUpdated)
     window.electronAPI.onSyncConflictDetected(handleConflict)
 
     return () => {
@@ -149,10 +165,14 @@ function App() {
   const loadReferences = async (thesisId: string) => {
     try {
       const data = await window.electronAPI.getReferences(thesisId)
-      setReferences(data)
+      if (currentThesisIdRef.current === thesisId) {
+        setReferences(data)
+      }
     } catch (error) {
       console.error('Failed to load references:', error)
-      setReferences([])
+      if (currentThesisIdRef.current === thesisId) {
+        setReferences([])
+      }
     }
   }
 
@@ -230,7 +250,8 @@ function App() {
 
   const handleDeleteThesis = async (id: string) => {
     try {
-      await window.electronAPI.deleteThesis(id)
+      const deleted = await window.electronAPI.deleteThesis(id)
+      if (!deleted) return
       await loadTheses()
       if (currentThesisId === id) {
         const remaining = theses.filter(t => t.id !== id)

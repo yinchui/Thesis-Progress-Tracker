@@ -5,6 +5,7 @@ import log from 'electron-log'
 export interface FileWatcherCallbacks {
   onThesesIndexChanged: () => void
   onVersionsChanged: (thesisDirName: string) => void
+  onReferencesChanged: (thesisDirName: string) => void
   onConflictDetected: (filePath: string) => void
 }
 
@@ -70,6 +71,16 @@ export function createFileWatcher(dataDir: string, callbacks: FileWatcherCallbac
       debounce(`versions:${thesisDirName}`, () => {
         log.info('Versions changed externally for:', thesisDirName)
         callbacks.onVersionsChanged(thesisDirName)
+      })
+      return
+    }
+
+    // <thesis-dir>/references.json
+    if (parts.length === 2 && fileName === 'references.json') {
+      const thesisDirName = parts[0]
+      debounce(`references:${thesisDirName}`, () => {
+        log.info('References changed externally for:', thesisDirName)
+        callbacks.onReferencesChanged(thesisDirName)
       })
       return
     }

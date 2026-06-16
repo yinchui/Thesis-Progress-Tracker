@@ -59,6 +59,7 @@ function Timeline({
         )}
         {onAddReference && onDeleteReference && (
           <ReferenceSection
+            key={thesisTitle || 'references'}
             references={references}
             onAddReference={onAddReference}
             onDeleteReference={onDeleteReference}
@@ -108,6 +109,7 @@ function Timeline({
       )}
       {onAddReference && onDeleteReference && (
         <ReferenceSection
+          key={thesisTitle || 'references'}
           references={references}
           onAddReference={onAddReference}
           onDeleteReference={onDeleteReference}

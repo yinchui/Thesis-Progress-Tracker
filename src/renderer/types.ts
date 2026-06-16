@@ -113,6 +113,7 @@ export interface ElectronAPI {
   // Sync events
   onSyncThesesUpdated: (callback: () => void) => void
   onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => void
+  onSyncReferencesUpdated: (callback: (thesisDirName: string) => void) => void
   onSyncConflictDetected: (callback: (filePath: string) => void) => void
   removeSyncListeners: () => void
 }

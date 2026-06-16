@@ -23,6 +23,7 @@ describe('reference UI contract', () => {
   it('Timeline integrates ReferenceSection', () => {
     const source = fs.readFileSync('src/renderer/components/Timeline.tsx', 'utf8')
     expect(source).toContain('ReferenceSection')
+    expect(source).toContain('key={thesisTitle')
     expect(source).toContain('references')
     expect(source).toContain('onAddReference')
     expect(source).toContain('onDeleteReference')
@@ -37,5 +38,9 @@ describe('reference UI contract', () => {
     expect(source).toContain('getReferences')
     expect(source).toContain('addReference')
     expect(source).toContain('deleteReference')
+    expect(source).toContain('useRef')
+    expect(source).toContain('currentThesisIdRef')
+    expect(source).toContain('onSyncReferencesUpdated')
+    expect(source).toContain('const deleted = await window.electronAPI.deleteThesis')
   })
 })

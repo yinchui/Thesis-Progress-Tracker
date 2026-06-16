@@ -123,12 +123,16 @@ const electronAPI = {
   onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => {
     ipcRenderer.on('sync-versions-updated', (_e: any, dirName: string) => callback(dirName))
   },
+  onSyncReferencesUpdated: (callback: (thesisDirName: string) => void) => {
+    ipcRenderer.on('sync-references-updated', (_e: any, dirName: string) => callback(dirName))
+  },
   onSyncConflictDetected: (callback: (filePath: string) => void) => {
     ipcRenderer.on('sync-conflict-detected', (_e: any, fp: string) => callback(fp))
   },
   removeSyncListeners: () => {
     ipcRenderer.removeAllListeners('sync-theses-updated')
     ipcRenderer.removeAllListeners('sync-versions-updated')
+    ipcRenderer.removeAllListeners('sync-references-updated')
     ipcRenderer.removeAllListeners('sync-conflict-detected')
   },
 };

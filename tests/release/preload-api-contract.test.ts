@@ -29,4 +29,10 @@ describe('preload api contract', () => {
     expect(source).toContain('add-reference')
     expect(source).toContain('delete-reference')
   })
+
+  it('includes reference sync listener methods', () => {
+    const source = fs.readFileSync('src/preload/preload.ts', 'utf8')
+    expect(source).toContain('onSyncReferencesUpdated')
+    expect(source).toContain('sync-references-updated')
+  })
 })
