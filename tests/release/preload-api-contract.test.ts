@@ -19,4 +19,14 @@ describe('preload api contract', () => {
     expect(source).toContain('resolvePendingEditSession')
     expect(source).toContain('onEditSessionWatchError')
   })
+
+  it('includes reference management methods', () => {
+    const source = fs.readFileSync('src/preload/preload.ts', 'utf8')
+    expect(source).toContain('getReferences')
+    expect(source).toContain('addReference')
+    expect(source).toContain('deleteReference')
+    expect(source).toContain('get-references')
+    expect(source).toContain('add-reference')
+    expect(source).toContain('delete-reference')
+  })
 })

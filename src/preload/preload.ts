@@ -20,6 +20,15 @@ export interface Version {
   fileType: string;
 }
 
+export interface ReferenceRecord {
+  id: string;
+  thesisId: string;
+  title: string;
+  authors: string;
+  year: string;
+  createdAt: string;
+}
+
 export type DataDirSource = 'custom' | 'app' | 'fallback';
 
 export interface DataDirStatus {
@@ -45,6 +54,16 @@ const electronAPI = {
   updateVersion: (id: string, updates: Partial<Version>): Promise<boolean> =>
     ipcRenderer.invoke('update-version', id, updates),
   deleteVersion: (id: string): Promise<boolean> => ipcRenderer.invoke('delete-version', id),
+
+  // Reference management
+  getReferences: (thesisId: string): Promise<ReferenceRecord[]> =>
+    ipcRenderer.invoke('get-references', thesisId),
+  addReference: (
+    thesisId: string,
+    input: { title: string; authors: string; year: string }
+  ): Promise<ReferenceRecord> => ipcRenderer.invoke('add-reference', thesisId, input),
+  deleteReference: (thesisId: string, referenceId: string): Promise<boolean> =>
+    ipcRenderer.invoke('delete-reference', thesisId, referenceId),
 
   // File operations
   selectFile: (): Promise<string | null> => ipcRenderer.invoke('select-file'),

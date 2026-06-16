@@ -18,6 +18,15 @@ export interface Version {
   fileType: string
 }
 
+export interface ReferenceRecord {
+  id: string
+  thesisId: string
+  title: string
+  authors: string
+  year: string
+  createdAt: string
+}
+
 export type DataDirSource = 'custom' | 'app' | 'fallback'
 
 export interface DataDirStatus {
@@ -55,6 +64,14 @@ export interface ElectronAPI {
   addVersion: (thesisId: string, version: Version) => Promise<boolean>
   updateVersion: (id: string, updates: Partial<Version>) => Promise<boolean>
   deleteVersion: (id: string) => Promise<boolean>
+
+  // 参考文献相关
+  getReferences: (thesisId: string) => Promise<ReferenceRecord[]>
+  addReference: (
+    thesisId: string,
+    input: { title: string; authors: string; year: string }
+  ) => Promise<ReferenceRecord>
+  deleteReference: (thesisId: string, referenceId: string) => Promise<boolean>
 
   // 文件操作
   selectFile: () => Promise<string | null>
