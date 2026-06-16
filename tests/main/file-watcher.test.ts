@@ -24,6 +24,7 @@ describe('file-watcher', () => {
     watcher = createFileWatcher(tmpDir, {
       onThesesIndexChanged: onThesesChanged,
       onVersionsChanged: vi.fn(),
+      onReferencesChanged: vi.fn(),
       onConflictDetected: vi.fn(),
     })
     watcher.start()
@@ -43,6 +44,7 @@ describe('file-watcher', () => {
     watcher = createFileWatcher(tmpDir, {
       onThesesIndexChanged: vi.fn(),
       onVersionsChanged: onVersionsChanged,
+      onReferencesChanged: vi.fn(),
       onConflictDetected: vi.fn(),
     })
     watcher.start()
@@ -54,11 +56,52 @@ describe('file-watcher', () => {
     expect(onVersionsChanged).toHaveBeenCalledWith('test-thesis')
   })
 
+  it('detects references.json changes in thesis subdirectory', async () => {
+    const onReferencesChanged = vi.fn()
+    const thesisDir = path.join(tmpDir, 'test-thesis')
+    fs.mkdirSync(thesisDir)
+
+    watcher = createFileWatcher(tmpDir, {
+      onThesesIndexChanged: vi.fn(),
+      onVersionsChanged: vi.fn(),
+      onReferencesChanged,
+      onConflictDetected: vi.fn(),
+    })
+    watcher.start()
+    await new Promise(r => setTimeout(r, 300))
+
+    fs.writeFileSync(path.join(thesisDir, 'references.json'), '{"references":[]}')
+
+    await new Promise(r => setTimeout(r, 1000))
+    expect(onReferencesChanged).toHaveBeenCalledWith('test-thesis')
+  })
+
+  it('detects reference file changes in thesis references subdirectory', async () => {
+    const onReferencesChanged = vi.fn()
+    const thesisDir = path.join(tmpDir, 'test-thesis', 'references')
+    fs.mkdirSync(thesisDir, { recursive: true })
+
+    watcher = createFileWatcher(tmpDir, {
+      onThesesIndexChanged: vi.fn(),
+      onVersionsChanged: vi.fn(),
+      onReferencesChanged,
+      onConflictDetected: vi.fn(),
+    })
+    watcher.start()
+    await new Promise(r => setTimeout(r, 300))
+
+    fs.writeFileSync(path.join(thesisDir, 'reference.pdf'), 'data')
+
+    await new Promise(r => setTimeout(r, 1000))
+    expect(onReferencesChanged).toHaveBeenCalledWith('test-thesis')
+  })
+
   it('suppresses self-triggered changes during silent period', async () => {
     const onThesesChanged = vi.fn()
     watcher = createFileWatcher(tmpDir, {
       onThesesIndexChanged: onThesesChanged,
       onVersionsChanged: vi.fn(),
+      onReferencesChanged: vi.fn(),
       onConflictDetected: vi.fn(),
     })
     watcher.start()
@@ -76,6 +119,7 @@ describe('file-watcher', () => {
     watcher = createFileWatcher(tmpDir, {
       onThesesIndexChanged: vi.fn(),
       onVersionsChanged: vi.fn(),
+      onReferencesChanged: vi.fn(),
       onConflictDetected: onConflict,
     })
     watcher.start()

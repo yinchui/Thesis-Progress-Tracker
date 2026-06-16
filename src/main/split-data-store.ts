@@ -31,6 +31,36 @@ export interface ThesisVersions {
   versions: VersionRecord[]
 }
 
+export type ReferenceFileStatus = 'pending' | 'recognizing' | 'ready' | 'failed'
+
+export interface ReferenceFileRecord {
+  id: string
+  thesisId: string
+  originalName: string
+  fileName: string
+  filePath: string
+  mimeType: string
+  status: ReferenceFileStatus
+  uploadedAt: string
+  recognizedAt?: string | null
+  error?: string | null
+}
+
+export interface ReferenceRecord {
+  id: string
+  thesisId: string
+  sourceFileId?: string
+  title: string
+  authors: string
+  year: string
+  createdAt: string
+}
+
+export interface ThesisReferences {
+  referenceFiles: ReferenceFileRecord[]
+  references: ReferenceRecord[]
+}
+
 export interface LocalState {
   currentThesisId: string | null
 }
@@ -87,6 +117,35 @@ export function loadThesisVersions(dataDir: string, thesisTitle: string): Thesis
 export function saveThesisVersions(dataDir: string, thesisTitle: string, data: ThesisVersions): void {
   const dir = getThesisDir(dataDir, thesisTitle)
   writeJson(path.join(dir, VERSIONS_FILE), data)
+}
+
+// ==================== Thesis References ====================
+
+const REFERENCES_FILE = 'references.json'
+
+export function loadThesisReferences(dataDir: string, thesisTitle: string): ThesisReferences {
+  const dir = getThesisDir(dataDir, thesisTitle)
+  const data = readJsonSafe<Partial<ThesisReferences>>(path.join(dir, REFERENCES_FILE), {
+    referenceFiles: [],
+    references: [],
+  })
+
+  return {
+    referenceFiles: Array.isArray(data.referenceFiles) ? data.referenceFiles : [],
+    references: Array.isArray(data.references) ? data.references : [],
+  }
+}
+
+export function saveThesisReferences(
+  dataDir: string,
+  thesisTitle: string,
+  data: Partial<ThesisReferences>
+): void {
+  const dir = getThesisDir(dataDir, thesisTitle)
+  writeJson(path.join(dir, REFERENCES_FILE), {
+    referenceFiles: Array.isArray(data.referenceFiles) ? data.referenceFiles : [],
+    references: Array.isArray(data.references) ? data.references : [],
+  })
 }
 
 // ==================== Local State ====================

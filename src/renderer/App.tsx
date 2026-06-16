@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Sidebar from './components/Sidebar'
 import Timeline from './components/Timeline'
 import UploadModal from './components/UploadModal'
 import VersionDetailModal from './components/VersionDetailModal'
 import EditVersionModal from './components/EditVersionModal'
 import SettingsModal from './components/SettingsModal'
+import DeepSeekKeyModal from './components/DeepSeekKeyModal'
+import ReferenceRecognitionModal, {
+  RecognizedReferenceDraft,
+} from './components/ReferenceRecognitionModal'
 import { Thesis } from './components/ThesisList'
-import { DataDirStatus, EditSession } from './types'
+import { DataDirStatus, EditSession, ReferenceFileRecord, ReferenceRecord } from './types'
 
 export interface Version {
   id: string
@@ -31,8 +35,16 @@ function App() {
   const [theses, setTheses] = useState<Thesis[]>([])
   const [currentThesisId, setCurrentThesisId] = useState<string | null>(null)
   const [versions, setVersions] = useState<Version[]>([])
+  const [referenceFiles, setReferenceFiles] = useState<ReferenceFileRecord[]>([])
+  const [references, setReferences] = useState<ReferenceRecord[]>([])
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showDeepSeekKeyModal, setShowDeepSeekKeyModal] = useState(false)
+  const [pendingRecognition, setPendingRecognition] = useState<{
+    sourceFileId: string
+    fileName: string
+    references: RecognizedReferenceDraft[]
+  } | null>(null)
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
   const [dataDirStatus, setDataDirStatus] = useState<DataDirStatus | null>(null)
   const [editSession, setEditSession] = useState<EditSession | null>(null)
@@ -41,6 +53,11 @@ function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<'synced' | 'updated' | 'conflict'>('synced')
   const [conflictFile, setConflictFile] = useState<string | null>(null)
+  const currentThesisIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    currentThesisIdRef.current = currentThesisId
+  }, [currentThesisId])
 
   // Load theses and current thesis on mount
   useEffect(() => {
@@ -48,10 +65,18 @@ function App() {
     loadDataDir()
   }, [])
 
-  // Load versions when current thesis changes
+  // Load thesis-specific data when current thesis changes
   useEffect(() => {
     if (currentThesisId) {
-      loadVersions(currentThesisId)
+      setVersions([])
+      setReferenceFiles([])
+      setReferences([])
+      void loadVersions(currentThesisId)
+      void loadReferences(currentThesisId)
+    } else {
+      setVersions([])
+      setReferenceFiles([])
+      setReferences([])
     }
   }, [currentThesisId])
 
@@ -106,6 +131,14 @@ function App() {
       setTimeout(() => setSyncStatus('synced'), 3000)
     }
 
+    const handleReferencesUpdated = (_thesisDirName: string) => {
+      if (currentThesisId) {
+        void loadReferences(currentThesisId)
+      }
+      setSyncStatus('updated')
+      setTimeout(() => setSyncStatus('synced'), 3000)
+    }
+
     const handleConflict = (filePath: string) => {
       setSyncStatus('conflict')
       setConflictFile(filePath)
@@ -113,6 +146,7 @@ function App() {
 
     window.electronAPI.onSyncThesesUpdated(handleThesesUpdated)
     window.electronAPI.onSyncVersionsUpdated(handleVersionsUpdated)
+    window.electronAPI.onSyncReferencesUpdated(handleReferencesUpdated)
     window.electronAPI.onSyncConflictDetected(handleConflict)
 
     return () => {
@@ -138,6 +172,22 @@ function App() {
       setVersions(data)
     } catch (error) {
       console.error('Failed to load versions:', error)
+    }
+  }
+
+  const loadReferences = async (thesisId: string) => {
+    try {
+      const data = await window.electronAPI.getReferenceData(thesisId)
+      if (currentThesisIdRef.current === thesisId) {
+        setReferenceFiles(data.referenceFiles)
+        setReferences(data.references)
+      }
+    } catch (error) {
+      console.error('Failed to load references:', error)
+      if (currentThesisIdRef.current === thesisId) {
+        setReferenceFiles([])
+        setReferences([])
+      }
     }
   }
 
@@ -185,7 +235,6 @@ function App() {
     try {
       await window.electronAPI.setCurrentThesis(id)
       setCurrentThesisId(id)
-      await loadVersions(id)
     } catch (error) {
       console.error('Failed to select thesis:', error)
     }
@@ -198,6 +247,8 @@ function App() {
         await loadTheses()
         setCurrentThesisId(newThesis.id)
         setVersions([])
+        setReferenceFiles([])
+        setReferences([])
       }
     } catch (error) {
       console.error('Failed to create thesis:', error)
@@ -215,16 +266,20 @@ function App() {
 
   const handleDeleteThesis = async (id: string) => {
     try {
-      await window.electronAPI.deleteThesis(id)
+      const deleted = await window.electronAPI.deleteThesis(id)
+      if (!deleted) return
       await loadTheses()
       if (currentThesisId === id) {
         const remaining = theses.filter(t => t.id !== id)
         if (remaining.length > 0) {
           setCurrentThesisId(remaining[0].id)
           await loadVersions(remaining[0].id)
+          await loadReferences(remaining[0].id)
         } else {
           setCurrentThesisId(null)
           setVersions([])
+          setReferenceFiles([])
+          setReferences([])
         }
       }
     } catch (error) {
@@ -271,6 +326,92 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to delete version:', error)
+    }
+  }
+
+  const handleUploadReferenceFile = async () => {
+    if (!currentThesisId) return
+    try {
+      const keyStatus = await window.electronAPI.getDeepSeekApiKeyStatus()
+      if (!keyStatus.hasKey) {
+        setShowDeepSeekKeyModal(true)
+        return
+      }
+
+      const filePath = await window.electronAPI.selectReferenceFile()
+      if (!filePath) return
+
+      const thesisIdAtStart = currentThesisId
+      setToast('正在识别参考文献')
+      const result = await window.electronAPI.importReferenceFile(thesisIdAtStart, filePath)
+      await loadReferences(thesisIdAtStart)
+
+      if (currentThesisIdRef.current !== thesisIdAtStart) return
+
+      if (result.status === 'failed') {
+        alert(result.error || '识别失败')
+        return
+      }
+
+      if (result.recognizedReferences?.length) {
+        setPendingRecognition({
+          sourceFileId: result.file.id,
+          fileName: result.file.originalName,
+          references: result.recognizedReferences,
+        })
+      } else {
+        alert('未识别到参考文献')
+      }
+    } catch (error) {
+      console.error('Failed to import reference file:', error)
+      const message = error instanceof Error ? error.message : '上传识别参考文献失败'
+      alert(message)
+    } finally {
+      setToast(null)
+    }
+  }
+
+  const handleConfirmRecognizedReferences = async (drafts: RecognizedReferenceDraft[]) => {
+    if (!currentThesisId || !pendingRecognition) return
+    try {
+      await window.electronAPI.saveRecognizedReferences(
+        currentThesisId,
+        pendingRecognition.sourceFileId,
+        drafts
+      )
+      await loadReferences(currentThesisId)
+      setPendingRecognition(null)
+      setToast('参考文献识别结果已保存')
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to save recognized references:', error)
+      alert('保存识别结果失败')
+    }
+  }
+
+  const handleDeleteReferenceFile = async (fileId: string) => {
+    if (!currentThesisId) return
+    try {
+      await window.electronAPI.deleteReferenceFile(currentThesisId, fileId, true)
+      await loadReferences(currentThesisId)
+      setToast('参考文献文件已删除')
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to delete reference file:', error)
+      alert('删除参考文献文件失败')
+    }
+  }
+
+  const handleDeleteReference = async (referenceId: string) => {
+    if (!currentThesisId) return
+    try {
+      await window.electronAPI.deleteReference(currentThesisId, referenceId)
+      await loadReferences(currentThesisId)
+      setToast('参考文献已删除')
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to delete reference:', error)
+      alert('删除参考文献失败')
     }
   }
 
@@ -371,6 +512,11 @@ function App() {
       <Timeline
         versions={versions}
         thesisTitle={currentThesis?.title || ''}
+        referenceFiles={referenceFiles}
+        references={references}
+        onUploadReferenceFile={handleUploadReferenceFile}
+        onDeleteReferenceFile={handleDeleteReferenceFile}
+        onDeleteReference={handleDeleteReference}
         onVersionClick={setSelectedVersion}
         onOpenFile={handleOpenFile}
         editSession={editSession ? {
@@ -423,6 +569,25 @@ function App() {
           onSelectDir={handleSelectDataDir}
           onResetDir={handleResetDataDir}
           onOpenDir={handleOpenDataDir}
+        />
+      )}
+
+      {showDeepSeekKeyModal && (
+        <DeepSeekKeyModal
+          onClose={() => setShowDeepSeekKeyModal(false)}
+          onSaved={() => {
+            setShowDeepSeekKeyModal(false)
+            void handleUploadReferenceFile()
+          }}
+        />
+      )}
+
+      {pendingRecognition && (
+        <ReferenceRecognitionModal
+          fileName={pendingRecognition.fileName}
+          references={pendingRecognition.references}
+          onCancel={() => setPendingRecognition(null)}
+          onConfirm={handleConfirmRecognizedReferences}
         />
       )}
 

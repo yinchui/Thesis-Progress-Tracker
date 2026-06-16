@@ -25,6 +25,8 @@ import {
   saveThesesIndex,
   loadThesisVersions,
   saveThesisVersions,
+  loadThesisReferences,
+  saveThesisReferences,
   loadLocalState,
   saveLocalState,
   getThesisDir,
@@ -33,10 +35,22 @@ import {
   sanitizeFileName,
   mergeThesesIndex,
   Thesis,
+  ReferenceFileRecord,
+  ReferenceRecord,
   VersionRecord,
 } from './split-data-store';
 import { needsMigration, migrateToSplitFormat } from './data-migration'
 import { createFileWatcher, FileWatcher } from './file-watcher';
+import {
+  clearDeepSeekApiKey,
+  loadDeepSeekApiKey,
+  saveDeepSeekApiKey,
+} from './deepseek-settings';
+import { recognizeReferencesWithDeepSeek } from './deepseek-client';
+import {
+  extractReferenceCandidateText,
+  extractTextFromReferenceDocument,
+} from './reference-text-extractor';
 
 // ==================== 工具函数 ====================
 
@@ -93,6 +107,50 @@ function uniqueFilePath(dir: string, fileName: string): string {
     counter++;
   }
   return filePath;
+}
+
+interface ReferenceInput {
+  title?: string
+  authors?: string
+  year?: string
+}
+
+type ReferenceImportStatus = 'saved' | 'failed'
+
+interface ImportedReferenceFileResult {
+  file: ReferenceFileRecord
+  status: ReferenceImportStatus
+  error?: string
+  recognizedReferences?: Array<{ title: string; authors: string; year: string }>
+}
+
+function getMimeTypeFromExtension(ext: string): string {
+  const normalized = ext.toLowerCase()
+  if (normalized === '.pdf') return 'application/pdf'
+  if (normalized === '.docx') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+  if (normalized === '.doc') return 'application/msword'
+  return 'application/octet-stream'
+}
+
+function normalizeReferenceInput(input: ReferenceInput): { title: string; authors: string; year: string } {
+  const title = input.title?.trim() || ''
+  const authors = input.authors?.trim() || ''
+  const year = input.year?.trim() || ''
+
+  if (!title || !authors || !year) {
+    throw new Error('参考文献标题、作者、年份不能为空')
+  }
+
+  return { title, authors, year }
+}
+
+function touchThesisUpdatedAt(index: { theses: Thesis[] }, thesisId: string): void {
+  const thesisIdx = index.theses.findIndex(t => t.id === thesisId)
+  if (thesisIdx !== -1) {
+    index.theses[thesisIdx].updatedAt = new Date().toISOString()
+  }
 }
 
 // ==================== Thesis IPC Handlers ====================
@@ -196,6 +254,274 @@ ipcMain.handle('get-current-thesis', async () => {
   log.info('IPC: get-current-thesis');
   return loadLocalState(getUserDataPath()).currentThesisId;
 });
+
+// ==================== Reference IPC Handlers ====================
+
+ipcMain.handle('get-references', async (_event, thesisId: string) => {
+  log.info('IPC: get-references', thesisId)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return []
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  return data.references
+})
+
+ipcMain.handle('get-reference-data', async (_event, thesisId: string) => {
+  log.info('IPC: get-reference-data', thesisId)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return { referenceFiles: [], references: [] }
+
+  return loadThesisReferences(dataDir, thesis.title)
+})
+
+ipcMain.handle('add-reference', async (_event, thesisId: string, input: ReferenceInput) => {
+  log.info('IPC: add-reference', thesisId, input)
+  const normalized = normalizeReferenceInput(input)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) throw new Error('未找到对应论文')
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const newReference: ReferenceRecord = {
+    id: generateId(),
+    thesisId,
+    title: normalized.title,
+    authors: normalized.authors,
+    year: normalized.year,
+    createdAt: new Date().toISOString(),
+  }
+
+  data.references.push(newReference)
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return newReference
+})
+
+ipcMain.handle('delete-reference', async (_event, thesisId: string, referenceId: string) => {
+  log.info('IPC: delete-reference', thesisId, referenceId)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return false
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const before = data.references.length
+  data.references = data.references.filter(reference => reference.id !== referenceId)
+  if (data.references.length === before) return false
+
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return true
+})
+
+ipcMain.handle('select-reference-file', async () => {
+  log.info('IPC: select-reference-file')
+  const windows = BrowserWindow.getAllWindows()
+  const mainWindow = windows[0]
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Reference Documents', extensions: ['pdf', 'docx', 'doc'] },
+    ],
+  })
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0]
+  }
+  return null
+})
+
+ipcMain.handle('import-reference-file', async (
+  _event,
+  thesisId: string,
+  sourcePath: string
+): Promise<ImportedReferenceFileResult> => {
+  log.info('IPC: import-reference-file', thesisId, sourcePath)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) throw new Error('未找到对应论文')
+  if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error('文件不存在')
+
+  const ext = path.extname(sourcePath).toLowerCase()
+  if (!['.pdf', '.docx', '.doc'].includes(ext)) {
+    throw new Error('仅支持 PDF、DOCX、DOC 文件')
+  }
+
+  const thesisDir = getThesisFilesDirNew(thesis.title)
+  const referenceDir = path.join(thesisDir, 'references')
+  fs.mkdirSync(referenceDir, { recursive: true })
+
+  const fileId = generateId()
+  const originalName = path.basename(sourcePath)
+  const fileName = `reference_${fileId}${ext}`
+  const destPath = uniqueFilePath(referenceDir, fileName)
+  fs.copyFileSync(sourcePath, destPath)
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const file: ReferenceFileRecord = {
+    id: fileId,
+    thesisId,
+    originalName,
+    fileName: path.basename(destPath),
+    filePath: path.join('references', path.basename(destPath)),
+    mimeType: getMimeTypeFromExtension(ext),
+    status: 'pending',
+    uploadedAt: new Date().toISOString(),
+    recognizedAt: null,
+    error: null,
+  }
+  data.referenceFiles.push(file)
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+
+  try {
+    file.status = 'recognizing'
+    saveThesisReferences(dataDir, thesis.title, data)
+
+    const apiKey = loadDeepSeekApiKey(getUserDataPath())
+    if (!apiKey) {
+      throw new Error('请先设置 DeepSeek API key')
+    }
+
+    const extractedText = await extractTextFromReferenceDocument(destPath)
+    const candidateText = extractReferenceCandidateText(extractedText)
+    if (!candidateText) {
+      throw new Error('未识别到可提取文字')
+    }
+
+    const recognizedReferences = await recognizeReferencesWithDeepSeek({
+      apiKey,
+      text: candidateText,
+    })
+    if (recognizedReferences.length === 0) {
+      throw new Error('未识别到参考文献')
+    }
+
+    file.status = 'pending'
+    file.error = null
+    saveThesisReferences(dataDir, thesis.title, data)
+    silenceWatcher()
+
+    return { file, status: 'saved', recognizedReferences }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '识别失败'
+    file.status = 'failed'
+    file.error = message
+    saveThesisReferences(dataDir, thesis.title, data)
+    silenceWatcher()
+    return { file, status: 'failed', error: message }
+  }
+})
+
+ipcMain.handle('delete-reference-file', async (
+  _event,
+  thesisId: string,
+  fileId: string,
+  deleteLinkedReferences = true
+) => {
+  log.info('IPC: delete-reference-file', thesisId, fileId, deleteLinkedReferences)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return false
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const file = data.referenceFiles.find(item => item.id === fileId)
+  if (!file) return false
+
+  const absPath = path.join(getThesisDir(dataDir, thesis.title), file.filePath)
+  if (fs.existsSync(absPath)) {
+    fs.unlinkSync(absPath)
+  }
+
+  data.referenceFiles = data.referenceFiles.filter(item => item.id !== fileId)
+  if (deleteLinkedReferences) {
+    data.references = data.references.filter(reference => reference.sourceFileId !== fileId)
+  }
+
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return true
+})
+
+ipcMain.handle('save-recognized-references', async (
+  _event,
+  thesisId: string,
+  sourceFileId: string,
+  references: Array<{ title: string; authors: string; year: string }>
+) => {
+  log.info('IPC: save-recognized-references', thesisId, sourceFileId, references.length)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) throw new Error('未找到对应论文')
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const file = data.referenceFiles.find(item => item.id === sourceFileId)
+  if (!file) throw new Error('未找到来源文件')
+
+  const now = new Date().toISOString()
+  const cleaned = references
+    .map(item => ({
+      title: item.title?.trim() || '',
+      authors: item.authors?.trim() || '',
+      year: item.year?.trim() || '',
+    }))
+    .filter(item => item.title && item.authors && item.year)
+
+  const newReferences: ReferenceRecord[] = cleaned.map(item => ({
+    id: generateId(),
+    thesisId,
+    sourceFileId,
+    title: item.title,
+    authors: item.authors,
+    year: item.year,
+    createdAt: now,
+  }))
+
+  data.references = [
+    ...data.references.filter(reference => reference.sourceFileId !== sourceFileId),
+    ...newReferences,
+  ]
+  file.status = 'ready'
+  file.recognizedAt = now
+  file.error = null
+
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return data.references
+})
+
+ipcMain.handle('get-deepseek-api-key-status', async () => {
+  return { hasKey: !!loadDeepSeekApiKey(getUserDataPath()) }
+})
+
+ipcMain.handle('save-deepseek-api-key', async (_event, apiKey: string) => {
+  saveDeepSeekApiKey(getUserDataPath(), apiKey)
+  return { hasKey: true }
+})
+
+ipcMain.handle('clear-deepseek-api-key', async () => {
+  clearDeepSeekApiKey(getUserDataPath())
+  return { hasKey: false }
+})
 
 // ==================== Version IPC Handlers ====================
 
@@ -537,6 +863,12 @@ export function initializeApp(): void {
       const windows = BrowserWindow.getAllWindows()
       if (windows.length > 0) {
         windows[0].webContents.send('sync-versions-updated', thesisDirName)
+      }
+    },
+    onReferencesChanged: (thesisDirName: string) => {
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        windows[0].webContents.send('sync-references-updated', thesisDirName)
       }
     },
     onConflictDetected: (filePath: string) => {

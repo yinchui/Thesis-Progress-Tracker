@@ -7,6 +7,8 @@ import {
   saveThesesIndex,
   loadThesisVersions,
   saveThesisVersions,
+  loadThesisReferences,
+  saveThesisReferences,
   loadLocalState,
   saveLocalState,
   getThesisDir,
@@ -70,6 +72,105 @@ describe('split-data-store', () => {
       saveThesisVersions(tmpDir, '新论文', { versions: [] })
       const dir = path.join(tmpDir, sanitizeFileName('新论文'))
       expect(fs.existsSync(dir)).toBe(true)
+    })
+  })
+
+  describe('thesis-references', () => {
+    it('returns empty references array when file does not exist', () => {
+      const result = loadThesisReferences(tmpDir, '论文A')
+      expect(result.referenceFiles).toEqual([])
+      expect(result.references).toEqual([])
+    })
+
+    it('round-trips thesis references', () => {
+      const data = {
+        referenceFiles: [],
+        references: [
+          {
+            id: 'r1',
+            thesisId: '1',
+            title: '参考文献A',
+            authors: '作者A',
+            year: '2026',
+            createdAt: '2026-06-16T00:00:00.000Z',
+          },
+        ],
+      }
+      saveThesisReferences(tmpDir, '论文A', data)
+      const loaded = loadThesisReferences(tmpDir, '论文A')
+      expect(loaded.referenceFiles).toEqual([])
+      expect(loaded.references).toHaveLength(1)
+      expect(loaded.references[0].title).toBe('参考文献A')
+      expect(loaded.references[0].authors).toBe('作者A')
+      expect(loaded.references[0].year).toBe('2026')
+    })
+
+    it('round-trips reference files and source-linked references', () => {
+      const data = {
+        referenceFiles: [
+          {
+            id: 'file-1',
+            thesisId: 't1',
+            originalName: 'refs.pdf',
+            fileName: 'reference_file-1.pdf',
+            filePath: 'references/reference_file-1.pdf',
+            mimeType: 'application/pdf',
+            status: 'ready' as const,
+            uploadedAt: '2026-06-16T00:00:00.000Z',
+            recognizedAt: '2026-06-16T00:01:00.000Z',
+            error: null,
+          },
+        ],
+        references: [
+          {
+            id: 'r1',
+            thesisId: 't1',
+            sourceFileId: 'file-1',
+            title: 'Reference A',
+            authors: 'Author A',
+            year: '2026',
+            createdAt: '2026-06-16T00:01:30.000Z',
+          },
+        ],
+      }
+
+      saveThesisReferences(tmpDir, '论文A', data)
+      const loaded = loadThesisReferences(tmpDir, '论文A')
+
+      expect(loaded.referenceFiles).toHaveLength(1)
+      expect(loaded.referenceFiles[0].status).toBe('ready')
+      expect(loaded.references[0].sourceFileId).toBe('file-1')
+    })
+
+    it('creates thesis directory if it does not exist', () => {
+      saveThesisReferences(tmpDir, '新论文', { referenceFiles: [], references: [] })
+      const dir = path.join(tmpDir, sanitizeFileName('新论文'))
+      expect(fs.existsSync(dir)).toBe(true)
+      expect(fs.existsSync(path.join(dir, 'references.json'))).toBe(true)
+    })
+
+    it('returns empty references array when references json is invalid', () => {
+      const thesisDir = path.join(tmpDir, sanitizeFileName('坏论文'))
+      fs.mkdirSync(thesisDir, { recursive: true })
+      fs.writeFileSync(path.join(thesisDir, 'references.json'), '{bad json', 'utf8')
+      const result = loadThesisReferences(tmpDir, '坏论文')
+      expect(result.referenceFiles).toEqual([])
+      expect(result.references).toEqual([])
+    })
+
+    it('adds an empty referenceFiles array for legacy references json', () => {
+      const thesisDir = path.join(tmpDir, sanitizeFileName('旧论文'))
+      fs.mkdirSync(thesisDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(thesisDir, 'references.json'),
+        JSON.stringify({ references: [] }),
+        'utf8'
+      )
+
+      const loaded = loadThesisReferences(tmpDir, '旧论文')
+
+      expect(loaded.referenceFiles).toEqual([])
+      expect(loaded.references).toEqual([])
     })
   })
 

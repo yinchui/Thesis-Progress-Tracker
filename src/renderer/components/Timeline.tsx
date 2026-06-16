@@ -1,10 +1,17 @@
 import { Version } from '../App'
+import { ReferenceFileRecord, ReferenceRecord } from '../types'
 import EditSessionBar from './EditSessionBar'
+import ReferenceSection from './ReferenceSection'
 import VersionCard from './VersionCard'
 
 interface TimelineProps {
   versions: Version[]
   thesisTitle?: string
+  referenceFiles?: ReferenceFileRecord[]
+  references?: ReferenceRecord[]
+  onUploadReferenceFile?: () => void | Promise<void>
+  onDeleteReferenceFile?: (fileId: string) => void | Promise<void>
+  onDeleteReference?: (referenceId: string) => void | Promise<void>
   onVersionClick: (version: Version) => void
   onOpenFile: (filePath: string) => void
   editSession?: {
@@ -19,6 +26,11 @@ interface TimelineProps {
 function Timeline({
   versions,
   thesisTitle,
+  referenceFiles = [],
+  references = [],
+  onUploadReferenceFile,
+  onDeleteReferenceFile,
+  onDeleteReference,
   onVersionClick,
   onOpenFile,
   editSession,
@@ -41,6 +53,16 @@ function Timeline({
             autoArchive={editSession.autoArchive}
             onCancel={onCancelEdit || (() => {})}
             onFinish={onFinishEdit || (() => {})}
+          />
+        )}
+        {onUploadReferenceFile && onDeleteReferenceFile && onDeleteReference && (
+          <ReferenceSection
+            key={thesisTitle || 'references'}
+            referenceFiles={referenceFiles}
+            references={references}
+            onUploadReferenceFile={onUploadReferenceFile}
+            onDeleteReferenceFile={onDeleteReferenceFile}
+            onDeleteReference={onDeleteReference}
           />
         )}
         <div className="flex-1 flex items-center justify-center">
@@ -83,6 +105,16 @@ function Timeline({
           autoArchive={editSession.autoArchive}
           onCancel={onCancelEdit || (() => {})}
           onFinish={onFinishEdit || (() => {})}
+        />
+      )}
+      {onUploadReferenceFile && onDeleteReferenceFile && onDeleteReference && (
+        <ReferenceSection
+          key={thesisTitle || 'references'}
+          referenceFiles={referenceFiles}
+          references={references}
+          onUploadReferenceFile={onUploadReferenceFile}
+          onDeleteReferenceFile={onDeleteReferenceFile}
+          onDeleteReference={onDeleteReference}
         />
       )}
 

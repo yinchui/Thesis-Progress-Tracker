@@ -20,6 +20,36 @@ export interface Version {
   fileType: string;
 }
 
+export interface ReferenceRecord {
+  id: string;
+  thesisId: string;
+  sourceFileId?: string;
+  title: string;
+  authors: string;
+  year: string;
+  createdAt: string;
+}
+
+export type ReferenceFileStatus = 'pending' | 'recognizing' | 'ready' | 'failed';
+
+export interface ReferenceFileRecord {
+  id: string;
+  thesisId: string;
+  originalName: string;
+  fileName: string;
+  filePath: string;
+  mimeType: string;
+  status: ReferenceFileStatus;
+  uploadedAt: string;
+  recognizedAt?: string | null;
+  error?: string | null;
+}
+
+export interface ReferenceData {
+  referenceFiles: ReferenceFileRecord[];
+  references: ReferenceRecord[];
+}
+
 export type DataDirSource = 'custom' | 'app' | 'fallback';
 
 export interface DataDirStatus {
@@ -45,6 +75,45 @@ const electronAPI = {
   updateVersion: (id: string, updates: Partial<Version>): Promise<boolean> =>
     ipcRenderer.invoke('update-version', id, updates),
   deleteVersion: (id: string): Promise<boolean> => ipcRenderer.invoke('delete-version', id),
+
+  // Reference management
+  getReferences: (thesisId: string): Promise<ReferenceRecord[]> =>
+    ipcRenderer.invoke('get-references', thesisId),
+  getReferenceData: (thesisId: string): Promise<ReferenceData> =>
+    ipcRenderer.invoke('get-reference-data', thesisId),
+  addReference: (
+    thesisId: string,
+    input: { title: string; authors: string; year: string }
+  ): Promise<ReferenceRecord> => ipcRenderer.invoke('add-reference', thesisId, input),
+  deleteReference: (thesisId: string, referenceId: string): Promise<boolean> =>
+    ipcRenderer.invoke('delete-reference', thesisId, referenceId),
+  selectReferenceFile: (): Promise<string | null> => ipcRenderer.invoke('select-reference-file'),
+  importReferenceFile: (
+    thesisId: string,
+    sourcePath: string
+  ): Promise<{
+    file: ReferenceFileRecord;
+    status: 'saved' | 'failed';
+    error?: string;
+    recognizedReferences?: Array<{ title: string; authors: string; year: string }>;
+  }> => ipcRenderer.invoke('import-reference-file', thesisId, sourcePath),
+  deleteReferenceFile: (
+    thesisId: string,
+    fileId: string,
+    deleteLinkedReferences?: boolean
+  ): Promise<boolean> => ipcRenderer.invoke('delete-reference-file', thesisId, fileId, deleteLinkedReferences),
+  saveRecognizedReferences: (
+    thesisId: string,
+    sourceFileId: string,
+    references: Array<{ title: string; authors: string; year: string }>
+  ): Promise<ReferenceRecord[]> =>
+    ipcRenderer.invoke('save-recognized-references', thesisId, sourceFileId, references),
+  getDeepSeekApiKeyStatus: (): Promise<{ hasKey: boolean }> =>
+    ipcRenderer.invoke('get-deepseek-api-key-status'),
+  saveDeepSeekApiKey: (apiKey: string): Promise<{ hasKey: boolean }> =>
+    ipcRenderer.invoke('save-deepseek-api-key', apiKey),
+  clearDeepSeekApiKey: (): Promise<{ hasKey: boolean }> =>
+    ipcRenderer.invoke('clear-deepseek-api-key'),
 
   // File operations
   selectFile: (): Promise<string | null> => ipcRenderer.invoke('select-file'),
@@ -104,12 +173,16 @@ const electronAPI = {
   onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => {
     ipcRenderer.on('sync-versions-updated', (_e: any, dirName: string) => callback(dirName))
   },
+  onSyncReferencesUpdated: (callback: (thesisDirName: string) => void) => {
+    ipcRenderer.on('sync-references-updated', (_e: any, dirName: string) => callback(dirName))
+  },
   onSyncConflictDetected: (callback: (filePath: string) => void) => {
     ipcRenderer.on('sync-conflict-detected', (_e: any, fp: string) => callback(fp))
   },
   removeSyncListeners: () => {
     ipcRenderer.removeAllListeners('sync-theses-updated')
     ipcRenderer.removeAllListeners('sync-versions-updated')
+    ipcRenderer.removeAllListeners('sync-references-updated')
     ipcRenderer.removeAllListeners('sync-conflict-detected')
   },
 };

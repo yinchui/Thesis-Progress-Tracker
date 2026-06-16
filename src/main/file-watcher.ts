@@ -5,6 +5,7 @@ import log from 'electron-log'
 export interface FileWatcherCallbacks {
   onThesesIndexChanged: () => void
   onVersionsChanged: (thesisDirName: string) => void
+  onReferencesChanged: (thesisDirName: string) => void
   onConflictDetected: (filePath: string) => void
 }
 
@@ -73,16 +74,41 @@ export function createFileWatcher(dataDir: string, callbacks: FileWatcherCallbac
       })
       return
     }
+
+    // <thesis-dir>/references.json
+    if (parts.length === 2 && fileName === 'references.json') {
+      const thesisDirName = parts[0]
+      debounce(`references:${thesisDirName}`, () => {
+        log.info('References changed externally for:', thesisDirName)
+        callbacks.onReferencesChanged(thesisDirName)
+      })
+      return
+    }
+
+    // <thesis-dir>/references/<uploaded-reference-file>
+    if (parts.length === 3 && parts[1] === 'references') {
+      const thesisDirName = parts[0]
+      debounce(`references:${thesisDirName}`, () => {
+        log.info('Reference file changed externally for:', thesisDirName)
+        callbacks.onReferencesChanged(thesisDirName)
+      })
+    }
   }
 
   return {
     start() {
       watcher = chokidar.watch(dataDir, {
         ignoreInitial: true,
-        depth: 2,
+        depth: 3,
         ignored: [
           /(^|[\/\\])\../,
-          /\.(pdf|docx?|txt)$/i,
+          (filePath: string) => {
+            const relativePath = path.relative(dataDir, filePath)
+            const parts = relativePath.split(path.sep)
+            const isDocumentFile = /\.(pdf|docx?|txt)$/i.test(filePath)
+            const isReferenceUpload = parts.length === 3 && parts[1] === 'references'
+            return isDocumentFile && !isReferenceUpload
+          },
           /data\.json\.backup$/,
         ],
       })

@@ -18,6 +18,43 @@ export interface Version {
   fileType: string
 }
 
+export interface ReferenceRecord {
+  id: string
+  thesisId: string
+  sourceFileId?: string
+  title: string
+  authors: string
+  year: string
+  createdAt: string
+}
+
+export type ReferenceFileStatus = 'pending' | 'recognizing' | 'ready' | 'failed'
+
+export interface ReferenceFileRecord {
+  id: string
+  thesisId: string
+  originalName: string
+  fileName: string
+  filePath: string
+  mimeType: string
+  status: ReferenceFileStatus
+  uploadedAt: string
+  recognizedAt?: string | null
+  error?: string | null
+}
+
+export interface ReferenceData {
+  referenceFiles: ReferenceFileRecord[]
+  references: ReferenceRecord[]
+}
+
+export interface ImportedReferenceFileResult {
+  file: ReferenceFileRecord
+  status: 'saved' | 'failed'
+  error?: string
+  recognizedReferences?: Array<{ title: string; authors: string; year: string }>
+}
+
 export type DataDirSource = 'custom' | 'app' | 'fallback'
 
 export interface DataDirStatus {
@@ -55,6 +92,30 @@ export interface ElectronAPI {
   addVersion: (thesisId: string, version: Version) => Promise<boolean>
   updateVersion: (id: string, updates: Partial<Version>) => Promise<boolean>
   deleteVersion: (id: string) => Promise<boolean>
+
+  // 参考文献相关
+  getReferences: (thesisId: string) => Promise<ReferenceRecord[]>
+  getReferenceData: (thesisId: string) => Promise<ReferenceData>
+  addReference: (
+    thesisId: string,
+    input: { title: string; authors: string; year: string }
+  ) => Promise<ReferenceRecord>
+  deleteReference: (thesisId: string, referenceId: string) => Promise<boolean>
+  selectReferenceFile: () => Promise<string | null>
+  importReferenceFile: (thesisId: string, sourcePath: string) => Promise<ImportedReferenceFileResult>
+  deleteReferenceFile: (
+    thesisId: string,
+    fileId: string,
+    deleteLinkedReferences?: boolean
+  ) => Promise<boolean>
+  saveRecognizedReferences: (
+    thesisId: string,
+    sourceFileId: string,
+    references: Array<{ title: string; authors: string; year: string }>
+  ) => Promise<ReferenceRecord[]>
+  getDeepSeekApiKeyStatus: () => Promise<{ hasKey: boolean }>
+  saveDeepSeekApiKey: (apiKey: string) => Promise<{ hasKey: boolean }>
+  clearDeepSeekApiKey: () => Promise<{ hasKey: boolean }>
 
   // 文件操作
   selectFile: () => Promise<string | null>
@@ -96,6 +157,7 @@ export interface ElectronAPI {
   // Sync events
   onSyncThesesUpdated: (callback: () => void) => void
   onSyncVersionsUpdated: (callback: (thesisDirName: string) => void) => void
+  onSyncReferencesUpdated: (callback: (thesisDirName: string) => void) => void
   onSyncConflictDetected: (callback: (filePath: string) => void) => void
   removeSyncListeners: () => void
 }
