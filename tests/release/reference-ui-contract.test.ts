@@ -10,4 +10,13 @@ describe('reference UI contract', () => {
     expect(source).toContain('年份')
     expect(source).toContain('onSubmit')
   })
+
+  it('provides a collapsible reference section', () => {
+    const source = fs.readFileSync('src/renderer/components/ReferenceSection.tsx', 'utf8')
+    expect(source).toContain('ReferenceModal')
+    expect(source).toContain('参考文献')
+    expect(source).toContain('暂无参考文献')
+    expect(source).toContain('新增参考文献')
+    expect(source).toContain('confirm')
+  })
 })
