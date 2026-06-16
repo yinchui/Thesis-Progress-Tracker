@@ -48,8 +48,8 @@ import {
 } from './deepseek-settings';
 import { recognizeReferencesWithDeepSeek } from './deepseek-client';
 import {
-  extractReferenceCandidateText,
   extractTextFromReferenceDocument,
+  extractUploadedDocumentIdentityText,
 } from './reference-text-extractor';
 
 // ==================== 工具函数 ====================
@@ -397,7 +397,7 @@ ipcMain.handle('import-reference-file', async (
     }
 
     const extractedText = await extractTextFromReferenceDocument(destPath)
-    const candidateText = extractReferenceCandidateText(extractedText)
+    const candidateText = extractUploadedDocumentIdentityText(extractedText)
     if (!candidateText) {
       throw new Error('未识别到可提取文字')
     }

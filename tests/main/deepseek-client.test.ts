@@ -54,4 +54,33 @@ describe('deepseek client', () => {
       })
     )
   })
+
+  it('prompts DeepSeek to identify the uploaded document itself', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ references: [{ title: 'A', authors: 'B', year: '2020' }] }),
+            },
+          },
+        ],
+      }),
+    })
+
+    await recognizeReferencesWithDeepSeek({
+      apiKey: 'sk-test',
+      text: 'Paper title Author References cited item',
+      fetchImpl: fetchMock as any,
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const promptText = body.messages.map((message: any) => message.content).join('\n')
+
+    expect(promptText).toContain('上传文件本身')
+    expect(promptText).toContain('只返回一条')
+    expect(promptText).toContain('忽略')
+    expect(promptText).toContain('References')
+  })
 })

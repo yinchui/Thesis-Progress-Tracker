@@ -48,15 +48,18 @@ export async function recognizeReferencesWithDeepSeek(
         {
           role: 'system',
           content: [
-            '你是参考文献识别助手。',
+            '你是学术文献元数据识别助手。',
+            '你的任务是识别上传文件本身是哪一篇论文或文献，不是识别这篇文件末尾列出的参考文献。',
             '请只返回 JSON 对象，格式为 {"references":[{"title":"...","authors":"...","year":"..."}]}。',
+            'references 数组只返回一条，也就是上传文件本身。',
+            '忽略正文中的 References、Bibliography、参考文献、参考资料章节，以及这些章节里的所有被引用文献。',
             '不要返回 Markdown，不要解释。',
-            '如果无法确定某一条的标题、作者或年份，请不要返回该条。',
+            '如果无法确定上传文件本身的标题、作者或年份，请返回 {"references":[]}。',
           ].join('\n'),
         },
         {
           role: 'user',
-          content: `从下面文本中识别参考文献，只提取标题、作者、年份：\n\n${params.text}`,
+          content: `从下面文本中识别上传文件本身的标题、作者、年份。只返回上传文件本身这一条，不要返回它引用的参考文献：\n\n${params.text}`,
         },
       ],
     }),

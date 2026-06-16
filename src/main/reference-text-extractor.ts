@@ -19,8 +19,12 @@ export function normalizeExtractedText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+function findReferenceHeading(text: string): RegExpExecArray | null {
+  return /(?:^|[\n\.。;；!?！？])\s*(references|bibliography|参考文献|参考资料)\s*[:：]?\s*/i.exec(text)
+}
+
 export function extractReferenceSection(text: string): string {
-  const headingMatch = /(?:^|\n)\s*(references|bibliography|参考文献|参考资料)\s*[:：]?\s*/i.exec(text)
+  const headingMatch = findReferenceHeading(text)
   if (!headingMatch) return ''
   return text.slice(headingMatch.index + headingMatch[0].length).trim()
 }
@@ -29,6 +33,48 @@ export function extractReferenceCandidateText(text: string, maxChars = 12000): s
   const section = extractReferenceSection(text)
   const source = section || text
   return source.slice(Math.max(0, source.length - maxChars))
+}
+
+export function extractUploadedDocumentIdentityText(text: string, maxChars = 16000): string {
+  const normalized = normalizeExtractedText(text)
+  const headingMatch = findReferenceHeading(text)
+  const head = headingMatch ? text.slice(0, headingMatch.index).trim() : text
+  const chunks = new Set<string>()
+  const lines = head.split(/\n+/).map(line => line.trim()).filter(Boolean)
+
+  if (lines.length > 0) {
+    chunks.add(lines.slice(0, 8).join(' '))
+  }
+
+  const keywords = [
+    'abstract',
+    '摘要',
+    'keywords',
+    '关键字',
+    'introduc',
+    'introduction',
+    '题目',
+    'title',
+    'author',
+    'journal',
+    'conference',
+    'doi',
+    'volume',
+    'issue',
+    'pages',
+    'press',
+  ]
+
+  for (const line of lines) {
+    const lower = line.toLowerCase()
+    if (keywords.some(keyword => lower.includes(keyword))) {
+      chunks.add(line)
+    }
+  }
+
+  const combined = chunks.size > 0 ? Array.from(chunks).join(' ') : head
+  const snippet = normalizeExtractedText(combined)
+  return snippet.slice(0, maxChars) || normalized.slice(0, maxChars)
 }
 
 export async function extractTextFromReferenceDocument(filePath: string): Promise<string> {

@@ -30,7 +30,8 @@ describe('reference IPC contract', () => {
 
   it('uses extraction, DeepSeek settings, and recognition in import flow', () => {
     expect(source).toContain('extractTextFromReferenceDocument')
-    expect(source).toContain('extractReferenceCandidateText')
+    expect(source).toContain('extractUploadedDocumentIdentityText')
+    expect(source).not.toContain('extractReferenceCandidateText')
     expect(source).toContain('loadDeepSeekApiKey')
     expect(source).toContain('recognizeReferencesWithDeepSeek')
   })
