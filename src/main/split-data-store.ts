@@ -31,6 +31,19 @@ export interface ThesisVersions {
   versions: VersionRecord[]
 }
 
+export interface ReferenceRecord {
+  id: string
+  thesisId: string
+  title: string
+  authors: string
+  year: string
+  createdAt: string
+}
+
+export interface ThesisReferences {
+  references: ReferenceRecord[]
+}
+
 export interface LocalState {
   currentThesisId: string | null
 }
@@ -87,6 +100,20 @@ export function loadThesisVersions(dataDir: string, thesisTitle: string): Thesis
 export function saveThesisVersions(dataDir: string, thesisTitle: string, data: ThesisVersions): void {
   const dir = getThesisDir(dataDir, thesisTitle)
   writeJson(path.join(dir, VERSIONS_FILE), data)
+}
+
+// ==================== Thesis References ====================
+
+const REFERENCES_FILE = 'references.json'
+
+export function loadThesisReferences(dataDir: string, thesisTitle: string): ThesisReferences {
+  const dir = getThesisDir(dataDir, thesisTitle)
+  return readJsonSafe(path.join(dir, REFERENCES_FILE), { references: [] })
+}
+
+export function saveThesisReferences(dataDir: string, thesisTitle: string, data: ThesisReferences): void {
+  const dir = getThesisDir(dataDir, thesisTitle)
+  writeJson(path.join(dir, REFERENCES_FILE), data)
 }
 
 // ==================== Local State ====================
