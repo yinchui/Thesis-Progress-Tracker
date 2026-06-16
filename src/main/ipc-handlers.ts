@@ -25,6 +25,8 @@ import {
   saveThesesIndex,
   loadThesisVersions,
   saveThesisVersions,
+  loadThesisReferences,
+  saveThesisReferences,
   loadLocalState,
   saveLocalState,
   getThesisDir,
@@ -33,6 +35,7 @@ import {
   sanitizeFileName,
   mergeThesesIndex,
   Thesis,
+  ReferenceRecord,
   VersionRecord,
 } from './split-data-store';
 import { needsMigration, migrateToSplitFormat } from './data-migration'
@@ -93,6 +96,31 @@ function uniqueFilePath(dir: string, fileName: string): string {
     counter++;
   }
   return filePath;
+}
+
+interface ReferenceInput {
+  title?: string
+  authors?: string
+  year?: string
+}
+
+function normalizeReferenceInput(input: ReferenceInput): { title: string; authors: string; year: string } {
+  const title = input.title?.trim() || ''
+  const authors = input.authors?.trim() || ''
+  const year = input.year?.trim() || ''
+
+  if (!title || !authors || !year) {
+    throw new Error('参考文献标题、作者、年份不能为空')
+  }
+
+  return { title, authors, year }
+}
+
+function touchThesisUpdatedAt(index: { theses: Thesis[] }, thesisId: string): void {
+  const thesisIdx = index.theses.findIndex(t => t.id === thesisId)
+  if (thesisIdx !== -1) {
+    index.theses[thesisIdx].updatedAt = new Date().toISOString()
+  }
 }
 
 // ==================== Thesis IPC Handlers ====================
@@ -196,6 +224,64 @@ ipcMain.handle('get-current-thesis', async () => {
   log.info('IPC: get-current-thesis');
   return loadLocalState(getUserDataPath()).currentThesisId;
 });
+
+// ==================== Reference IPC Handlers ====================
+
+ipcMain.handle('get-references', async (_event, thesisId: string) => {
+  log.info('IPC: get-references', thesisId)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return []
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  return data.references
+})
+
+ipcMain.handle('add-reference', async (_event, thesisId: string, input: ReferenceInput) => {
+  log.info('IPC: add-reference', thesisId, input)
+  const normalized = normalizeReferenceInput(input)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) throw new Error('未找到对应论文')
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const newReference: ReferenceRecord = {
+    id: generateId(),
+    thesisId,
+    title: normalized.title,
+    authors: normalized.authors,
+    year: normalized.year,
+    createdAt: new Date().toISOString(),
+  }
+
+  data.references.push(newReference)
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return newReference
+})
+
+ipcMain.handle('delete-reference', async (_event, thesisId: string, referenceId: string) => {
+  log.info('IPC: delete-reference', thesisId, referenceId)
+  const dataDir = getDataDir()
+  const index = loadThesesIndex(dataDir)
+  const thesis = index.theses.find(t => t.id === thesisId)
+  if (!thesis) return false
+
+  const data = loadThesisReferences(dataDir, thesis.title)
+  const before = data.references.length
+  data.references = data.references.filter(reference => reference.id !== referenceId)
+  if (data.references.length === before) return false
+
+  saveThesisReferences(dataDir, thesis.title, data)
+  touchThesisUpdatedAt(index, thesisId)
+  saveThesesIndex(dataDir, index)
+  silenceWatcher()
+  return true
+})
 
 // ==================== Version IPC Handlers ====================
 
