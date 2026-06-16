@@ -19,4 +19,23 @@ describe('reference UI contract', () => {
     expect(source).toContain('新增参考文献')
     expect(source).toContain('confirm')
   })
+
+  it('Timeline integrates ReferenceSection', () => {
+    const source = fs.readFileSync('src/renderer/components/Timeline.tsx', 'utf8')
+    expect(source).toContain('ReferenceSection')
+    expect(source).toContain('references')
+    expect(source).toContain('onAddReference')
+    expect(source).toContain('onDeleteReference')
+  })
+
+  it('App manages reference state and handlers', () => {
+    const source = fs.readFileSync('src/renderer/App.tsx', 'utf8')
+    expect(source).toContain('references')
+    expect(source).toContain('loadReferences')
+    expect(source).toContain('handleAddReference')
+    expect(source).toContain('handleDeleteReference')
+    expect(source).toContain('getReferences')
+    expect(source).toContain('addReference')
+    expect(source).toContain('deleteReference')
+  })
 })

@@ -6,7 +6,7 @@ import VersionDetailModal from './components/VersionDetailModal'
 import EditVersionModal from './components/EditVersionModal'
 import SettingsModal from './components/SettingsModal'
 import { Thesis } from './components/ThesisList'
-import { DataDirStatus, EditSession } from './types'
+import { DataDirStatus, EditSession, ReferenceRecord } from './types'
 
 export interface Version {
   id: string
@@ -31,6 +31,7 @@ function App() {
   const [theses, setTheses] = useState<Thesis[]>([])
   const [currentThesisId, setCurrentThesisId] = useState<string | null>(null)
   const [versions, setVersions] = useState<Version[]>([])
+  const [references, setReferences] = useState<ReferenceRecord[]>([])
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null)
@@ -48,10 +49,14 @@ function App() {
     loadDataDir()
   }, [])
 
-  // Load versions when current thesis changes
+  // Load thesis-specific data when current thesis changes
   useEffect(() => {
     if (currentThesisId) {
-      loadVersions(currentThesisId)
+      void loadVersions(currentThesisId)
+      void loadReferences(currentThesisId)
+    } else {
+      setVersions([])
+      setReferences([])
     }
   }, [currentThesisId])
 
@@ -141,6 +146,16 @@ function App() {
     }
   }
 
+  const loadReferences = async (thesisId: string) => {
+    try {
+      const data = await window.electronAPI.getReferences(thesisId)
+      setReferences(data)
+    } catch (error) {
+      console.error('Failed to load references:', error)
+      setReferences([])
+    }
+  }
+
   const loadDataDir = async () => {
     try {
       const status = await window.electronAPI.getDataDir()
@@ -185,7 +200,6 @@ function App() {
     try {
       await window.electronAPI.setCurrentThesis(id)
       setCurrentThesisId(id)
-      await loadVersions(id)
     } catch (error) {
       console.error('Failed to select thesis:', error)
     }
@@ -198,6 +212,7 @@ function App() {
         await loadTheses()
         setCurrentThesisId(newThesis.id)
         setVersions([])
+        setReferences([])
       }
     } catch (error) {
       console.error('Failed to create thesis:', error)
@@ -222,9 +237,11 @@ function App() {
         if (remaining.length > 0) {
           setCurrentThesisId(remaining[0].id)
           await loadVersions(remaining[0].id)
+          await loadReferences(remaining[0].id)
         } else {
           setCurrentThesisId(null)
           setVersions([])
+          setReferences([])
         }
       }
     } catch (error) {
@@ -271,6 +288,32 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to delete version:', error)
+    }
+  }
+
+  const handleAddReference = async (input: { title: string; authors: string; year: string }) => {
+    if (!currentThesisId) return
+    try {
+      await window.electronAPI.addReference(currentThesisId, input)
+      await loadReferences(currentThesisId)
+      setToast('参考文献已添加')
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to add reference:', error)
+      alert('新增参考文献失败')
+    }
+  }
+
+  const handleDeleteReference = async (referenceId: string) => {
+    if (!currentThesisId) return
+    try {
+      await window.electronAPI.deleteReference(currentThesisId, referenceId)
+      await loadReferences(currentThesisId)
+      setToast('参考文献已删除')
+      setTimeout(() => setToast(null), 3000)
+    } catch (error) {
+      console.error('Failed to delete reference:', error)
+      alert('删除参考文献失败')
     }
   }
 
@@ -371,6 +414,9 @@ function App() {
       <Timeline
         versions={versions}
         thesisTitle={currentThesis?.title || ''}
+        references={references}
+        onAddReference={handleAddReference}
+        onDeleteReference={handleDeleteReference}
         onVersionClick={setSelectedVersion}
         onOpenFile={handleOpenFile}
         editSession={editSession ? {

@@ -1,10 +1,21 @@
 import { Version } from '../App'
+import { ReferenceRecord } from '../types'
 import EditSessionBar from './EditSessionBar'
+import ReferenceSection from './ReferenceSection'
 import VersionCard from './VersionCard'
+
+interface ReferenceInput {
+  title: string
+  authors: string
+  year: string
+}
 
 interface TimelineProps {
   versions: Version[]
   thesisTitle?: string
+  references?: ReferenceRecord[]
+  onAddReference?: (input: ReferenceInput) => void | Promise<void>
+  onDeleteReference?: (referenceId: string) => void | Promise<void>
   onVersionClick: (version: Version) => void
   onOpenFile: (filePath: string) => void
   editSession?: {
@@ -19,6 +30,9 @@ interface TimelineProps {
 function Timeline({
   versions,
   thesisTitle,
+  references = [],
+  onAddReference,
+  onDeleteReference,
   onVersionClick,
   onOpenFile,
   editSession,
@@ -41,6 +55,13 @@ function Timeline({
             autoArchive={editSession.autoArchive}
             onCancel={onCancelEdit || (() => {})}
             onFinish={onFinishEdit || (() => {})}
+          />
+        )}
+        {onAddReference && onDeleteReference && (
+          <ReferenceSection
+            references={references}
+            onAddReference={onAddReference}
+            onDeleteReference={onDeleteReference}
           />
         )}
         <div className="flex-1 flex items-center justify-center">
@@ -83,6 +104,13 @@ function Timeline({
           autoArchive={editSession.autoArchive}
           onCancel={onCancelEdit || (() => {})}
           onFinish={onFinishEdit || (() => {})}
+        />
+      )}
+      {onAddReference && onDeleteReference && (
+        <ReferenceSection
+          references={references}
+          onAddReference={onAddReference}
+          onDeleteReference={onDeleteReference}
         />
       )}
 
